@@ -27,17 +27,53 @@
       <nav class="sidebar-nav">
         <template v-for="group in navGroups" :key="group.label">
           <p v-if="!sidebarCollapsed" class="sidebar-group-label">{{ group.label }}</p>
-          <RouterLink
-            v-for="item in group.items"
-            :key="item.to"
-            :to="item.to"
-            class="sidebar-link"
-            active-class="is-active"
-            :title="sidebarCollapsed ? item.label : ''"
-          >
-            <span class="sidebar-link__icon" v-html="item.icon"></span>
-            <span v-if="!sidebarCollapsed" class="sidebar-link__label">{{ item.label }}</span>
-          </RouterLink>
+
+          <template v-for="item in group.items" :key="item.to || item.label">
+            <!-- 有子菜单的父级 -->
+            <template v-if="item.children">
+              <button
+                class="sidebar-link sidebar-link--parent"
+                :class="{ 'is-open': expandedGroups.has(item.label) }"
+                :title="sidebarCollapsed ? item.label : ''"
+                @click="toggleGroup(item.label)"
+              >
+                <span class="sidebar-link__icon" v-html="item.icon"></span>
+                <span v-if="!sidebarCollapsed" class="sidebar-link__label">{{ item.label }}</span>
+                <span v-if="!sidebarCollapsed" class="sidebar-link__arrow" :class="{ 'is-open': expandedGroups.has(item.label) }">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </button>
+              <!-- 子菜单列表 -->
+              <div
+                v-if="!sidebarCollapsed"
+                class="sidebar-submenu"
+                :class="{ 'is-open': expandedGroups.has(item.label) }"
+              >
+                <RouterLink
+                  v-for="child in item.children"
+                  :key="child.to"
+                  :to="child.to"
+                  class="sidebar-sublink"
+                  active-class="is-active"
+                >
+                  <span class="sidebar-sublink__dot"></span>
+                  <span class="sidebar-sublink__label">{{ child.label }}</span>
+                </RouterLink>
+              </div>
+            </template>
+
+            <!-- 普通链接 -->
+            <RouterLink
+              v-else
+              :to="item.to"
+              class="sidebar-link"
+              active-class="is-active"
+              :title="sidebarCollapsed ? item.label : ''"
+            >
+              <span class="sidebar-link__icon" v-html="item.icon"></span>
+              <span v-if="!sidebarCollapsed" class="sidebar-link__label">{{ item.label }}</span>
+            </RouterLink>
+          </template>
         </template>
       </nav>
 
@@ -86,6 +122,17 @@ const router = useRouter()
 
 const sidebarCollapsed = ref(false)
 
+// 记录哪些父级菜单是展开的
+const expandedGroups = ref(new Set(['实验管理']))
+
+function toggleGroup(label) {
+  if (expandedGroups.value.has(label)) {
+    expandedGroups.value.delete(label)
+  } else {
+    expandedGroups.value.add(label)
+  }
+}
+
 const userInitial = computed(() => {
   const name = userStore.loginUser?.realName || '教'
   return name.charAt(0)
@@ -108,14 +155,12 @@ const navGroups = [
     label: '实验管理',
     items: [
       {
-        label: 'Python 实验',
-        to: '/teacher/experiment/python',
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
-      },
-      {
-        label: 'Vue 实验',
-        to: '/teacher/experiment/vue',
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 22 20 2 20"/></svg>`,
+        label: '实验管理',
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2v-4M9 21H5a2 2 0 01-2-2v-4m0 0h18"/></svg>`,
+        children: [
+          { label: 'Python 实验', to: '/teacher/experiment/python' },
+          { label: 'Vue 实验', to: '/teacher/experiment/vue' },
+        ],
       },
     ],
   },
@@ -258,6 +303,84 @@ function handleLogout() {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* 父级按钮 */
+.sidebar-link--parent {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.sidebar-link--parent.is-open {
+  color: #fff;
+  background: var(--color-sidebar-hover);
+}
+
+.sidebar-link__label {
+  flex: 1;
+}
+
+.sidebar-link__arrow {
+  display: flex;
+  align-items: center;
+  color: var(--color-sidebar-muted);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.sidebar-link__arrow.is-open {
+  transform: rotate(180deg);
+}
+
+/* 子菜单 */
+.sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-submenu.is-open {
+  max-height: 200px;
+}
+
+.sidebar-sublink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 36px;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-sublink:hover {
+  background: var(--color-sidebar-hover);
+  color: #fff;
+}
+
+.sidebar-sublink.is-active {
+  color: #60a5fa;
+  background: rgba(26, 86, 219, 0.18);
+}
+
+.sidebar-sublink__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.sidebar-sublink.is-active .sidebar-sublink__dot {
+  opacity: 1;
 }
 
 /* User */
