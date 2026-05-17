@@ -66,9 +66,9 @@ defineProps({
 }
 
 .placeholder-page__hero {
-  padding: 28px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, #13233f, #1b63d1);
+  padding: 28px 32px;
+  border-radius: var(--radius-lg);
+  background: var(--color-sidebar-bg);
   color: #ffffff;
 }
 
@@ -76,19 +76,25 @@ defineProps({
   display: inline-flex;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 0.85rem;
+  background: rgba(26, 86, 219, 0.4);
+  color: #93c5fd;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .placeholder-page__hero h1 {
   margin: 14px 0 8px;
-  font-size: 2rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #fff;
 }
 
 .placeholder-page__hero p {
   margin: 0;
   max-width: 680px;
-  color: rgba(255, 255, 255, 0.9);
+  color: #94a3b8;
+  font-size: 0.95rem;
 }
 
 .placeholder-page__grid {
@@ -100,7 +106,7 @@ defineProps({
 ul {
   margin: 0;
   padding-left: 18px;
-  color: #33415d;
+  color: var(--color-text-muted);
 }
 
 li + li {

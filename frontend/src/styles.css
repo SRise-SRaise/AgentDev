@@ -1,13 +1,56 @@
+/* ===== 设计令牌 ===== */
 :root {
-  color-scheme: light;
-  font-family: "Segoe UI", Arial, sans-serif;
+  /* 主色 */
+  --color-primary: #1a56db;
+  --color-primary-hover: #1648c7;
+  --color-primary-light: #e8effe;
+
+  /* 中性色 */
+  --color-bg: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-text-subtle: #94a3b8;
+
+  /* 侧边栏（教师端） */
+  --color-sidebar-bg: #0f172a;
+  --color-sidebar-text: #e2e8f0;
+  --color-sidebar-muted: #94a3b8;
+  --color-sidebar-active: #1a56db;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.06);
+
+  /* 顶导（学生端） */
+  --color-topnav-bg: #0f172a;
+  --color-topnav-text: #e2e8f0;
+
+  /* 状态色 */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.10);
+  --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.14);
+
+  /* 字体 */
+  font-family: "PingFang SC", "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #172033;
-  background: #f5f7fb;
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 
-* {
+/* ===== Reset ===== */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -30,4 +73,100 @@ select {
 
 #app {
   min-height: 100vh;
+}
+
+/* ===== 通用表单控件 ===== */
+.form-control {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.12);
+}
+
+.form-control::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* ===== 通用按钮 ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, transform 0.12s, box-shadow 0.18s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--color-primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn--outline {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1.5px solid var(--color-primary);
+}
+
+.btn--outline:hover {
+  background: var(--color-primary-light);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* ===== 通用卡片 ===== */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+}
+
+/* ===== 页面占位 ===== */
+.placeholder-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  color: var(--color-text-muted);
+  gap: 8px;
+}
+
+.placeholder-page h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--color-text);
+}
+
+.placeholder-page p {
+  margin: 0;
+  font-size: 0.9rem;
 }

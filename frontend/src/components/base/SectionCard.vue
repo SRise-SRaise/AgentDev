@@ -25,21 +25,24 @@ defineProps({
 
 <style scoped>
 .section-card {
-  background: #ffffff;
-  border: 1px solid #d8e0ef;
-  border-radius: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: 0 12px 30px rgba(31, 45, 61, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .section-card__header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .section-card__header p {
-  margin: 8px 0 0;
-  color: #61708a;
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
 }
 
 .section-card__body {
