@@ -33,27 +33,29 @@ router.afterEach((to) => {
     : 'Web Advanced Platform'
 })
 
-router.beforeEach((to) => {
-  // 需要在组件外部获取 store 时必须在 beforeEach 内部调用
+router.beforeEach(async (to) => {
   const userStore = useUserStore()
 
-  // 已登录用户不允许访问仅访客页面（登录页）
+  if (to.meta.guestOnly || to.meta.requiresAuth) {
+    await userStore.restoreSession()
+  }
+
   if (to.meta.guestOnly && userStore.isLoggedIn) {
     const dest = userStore.isTeacher ? '/teacher/course' : '/student/course'
     return { path: dest }
   }
 
-  // 需要登录的页面
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  // 角色鉴权（开发阶段宽松，登录后如果角色不匹配，重定向到对应首页）
-  // 暂时注释以便测试，上线时可启用
-  // if (to.meta.role && to.meta.role !== userStore.role) {
-  //   const dest = userStore.isTeacher ? '/teacher/course' : '/student/course'
-  //   return { path: dest }
-  // }
+  if (to.meta.role === 'TEACHER' && !userStore.isTeacher) {
+    return { path: '/student/course' }
+  }
+
+  if (to.meta.role === 'STUDENT' && !userStore.isStudent) {
+    return { path: '/teacher/course' }
+  }
 })
 
 export default router

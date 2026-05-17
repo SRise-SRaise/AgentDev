@@ -57,14 +57,6 @@
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">身份</label>
-              <div class="role-tabs">
-                <button type="button" class="role-tab" :class="{ active: loginForm.role === 'STUDENT' }" @click="loginForm.role = 'STUDENT'">学生</button>
-                <button type="button" class="role-tab" :class="{ active: loginForm.role === 'TEACHER' }" @click="loginForm.role = 'TEACHER'">教师</button>
-              </div>
-            </div>
-
             <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
 
             <button type="submit" class="btn btn--primary btn--block" :disabled="loading">
@@ -82,13 +74,13 @@
           <div class="quick-entry">
             <span class="quick-entry__label">快捷体验</span>
             <div class="quick-entry__btns">
-              <button type="button" class="quick-btn quick-btn--student" @click="quickEnter('STUDENT')">
+              <button type="button" class="quick-btn quick-btn--student" @click="quickLogin('STUDENT')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
                 </svg>
                 学生端
               </button>
-              <button type="button" class="quick-btn quick-btn--teacher" @click="quickEnter('TEACHER')">
+              <button type="button" class="quick-btn quick-btn--teacher" @click="quickLogin('TEACHER')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
                 </svg>
@@ -196,6 +188,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { login, logout, registerStudent } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -214,18 +207,15 @@ const errorMsg = ref('')
 const registerError = ref('')
 const registerSuccess = ref('')
 
-const loginForm = ref({ username: '', password: '', role: 'STUDENT' })
+const loginForm = ref({ username: '', password: '' })
 
 const registerForm = ref({
-  // sys_user
   username: '',
   realName: '',
   password: '',
   confirmPassword: '',
   phone: '',
   email: '',
-  role: 'STUDENT',
-  // student
   studentNo: '',
   gender: '',
   className: '',
@@ -245,18 +235,22 @@ function toLogin() {
 }
 
 function navigateByRole(role) {
-  router.push(role === 'TEACHER' ? '/teacher/course' : '/student/course')
+  router.push(role === 'STUDENT' ? '/student/course' : '/teacher/course')
 }
 
-function quickEnter(role) {
-  const mockUser = {
-    id: role === 'TEACHER' ? 0 : 99,
-    username: role === 'TEACHER' ? '测试教师' : '测试学生',
-    realName: role === 'TEACHER' ? '测试教师' : '测试学生',
-    role,
-  }
-  userStore.login(mockUser, 'mock-token-guest-' + Date.now())
-  navigateByRole(role)
+function applyLoginUser(loginUser) {
+  userStore.login(loginUser)
+  navigateByRole(loginUser.role)
+}
+
+async function quickLogin(role) {
+  loginForm.value.username = role === 'TEACHER' ? 'admin' : '23201321'
+  loginForm.value.password = '123456'
+  await handleLogin()
+}
+
+function extractMessage(res, fallback) {
+  return res?.message || fallback
 }
 
 async function handleLogin() {
@@ -267,18 +261,16 @@ async function handleLogin() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // TODO: 对接后端替换为真实 API
-    await new Promise((r) => setTimeout(r, 700))
-    const mockUser = {
-      id: 1,
+    const res = await login({
       username: loginForm.value.username,
-      realName: loginForm.value.username,
-      role: loginForm.value.role,
+      password: loginForm.value.password,
+    })
+    if (res.code !== 0 || !res.data) {
+      throw new Error(extractMessage(res, '登录失败，请检查账号密码'))
     }
-    userStore.login(mockUser, 'mock-token-' + Date.now())
-    navigateByRole(loginForm.value.role)
-  } catch {
-    errorMsg.value = '登录失败，请检查账号密码'
+    applyLoginUser(res.data)
+  } catch (error) {
+    errorMsg.value = error?.message || '登录失败，请检查账号密码'
   } finally {
     loading.value = false
   }
@@ -290,27 +282,37 @@ async function handleRegister() {
 
   // 公共校验
   if (!registerForm.value.username) { registerError.value = '请填写登录账号'; return }
-  if (!registerForm.value.realName) { registerError.value = '��填写真实姓名'; return }
+  if (!registerForm.value.realName) { registerError.value = '请填写真实姓名'; return }
   if (!registerForm.value.password) { registerError.value = '请设置密码'; return }
   if (registerForm.value.password !== registerForm.value.confirmPassword) {
     registerError.value = '两次密码不一致'
     return
   }
-  // 学生额外校验
-  if (registerForm.value.role === 'STUDENT') {
-    if (!registerForm.value.studentNo) { registerError.value = '���填写学号'; return }
-    if (!registerForm.value.className) { registerError.value = '请填写班级'; return }
-  }
+  if (!registerForm.value.studentNo) { registerError.value = '请填写学号'; return }
+  if (!registerForm.value.className) { registerError.value = '请填写班级'; return }
 
   regLoading.value = true
   try {
-    // TODO: 对接后端替换为真实 API
-    // 提交字段参考：sys_user + student/teacher 关联表
-    await new Promise((r) => setTimeout(r, 800))
+    const res = await registerStudent({
+      username: registerForm.value.username,
+      realName: registerForm.value.realName,
+      password: registerForm.value.password,
+      checkPassword: registerForm.value.confirmPassword,
+      phone: registerForm.value.phone,
+      email: registerForm.value.email,
+      studentNo: registerForm.value.studentNo,
+      gender: registerForm.value.gender,
+      className: registerForm.value.className,
+    })
+    if (res.code !== 0) {
+      throw new Error(extractMessage(res, '注册失败，请稍后重试'))
+    }
+    loginForm.value.username = registerForm.value.username
+    loginForm.value.password = ''
     registerSuccess.value = '注册成功！即将跳转登录'
     setTimeout(() => toLogin(), 1400)
-  } catch {
-    registerError.value = '注册失败，请稍后重试'
+  } catch (error) {
+    registerError.value = error?.message || '注册失败，请稍后重试'
   } finally {
     regLoading.value = false
   }
