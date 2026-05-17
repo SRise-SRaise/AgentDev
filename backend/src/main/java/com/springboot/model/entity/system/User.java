@@ -1,83 +1,75 @@
 package com.springboot.model.entity.system;
 
-import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.IdType;
 import java.io.Serializable;
 import java.util.Date;
 import lombok.Data;
 
 /**
- * 用户
+ * 系统用户
  *
  */
-@TableName(value = "user")
+@TableName(value = "sys_user")
 @Data
 public class User implements Serializable {
 
     /**
      * id
      */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
-     * 用户账号
+     * 登录账号
      */
-    private String userAccount;
+    private String username;
 
     /**
-     * 用户密码
+     * 密码哈希
      */
-    private String userPassword;
+    @TableField("password_hash")
+    private String passwordHash;
 
     /**
-     * 开放平台id
+     * 真实姓名
      */
-    private String unionId;
+    @TableField("real_name")
+    private String realName;
 
     /**
-     * 公众号openId
+     * 用户角色
      */
-    private String mpOpenId;
+    private String role;
 
     /**
-     * 用户昵称
+     * 手机号
      */
-    private String userName;
+    private String phone;
 
     /**
-     * 用户头像
+     * 邮箱
      */
-    private String userAvatar;
+    private String email;
 
     /**
-     * 用户简介
+     * 状态：1启用 0禁用
      */
-    private String userProfile;
-
-    /**
-     * 用户角色：user/admin/ban
-     */
-    private String userRole;
+    private Integer status;
 
     /**
      * 创建时间
      */
-    private Date createTime;
+    @TableField("created_at")
+    private Date createdAt;
 
     /**
      * 更新时间
      */
-    private Date updateTime;
-
-    /**
-     * 是否删除
-     */
-    @TableLogic
-    private Integer isDelete;
+    @TableField("updated_at")
+    private Date updatedAt;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

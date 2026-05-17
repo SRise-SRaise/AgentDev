@@ -643,10 +643,46 @@ CREATE TABLE operation_log (
    说明：对应数据库设计文档中的推荐初始化数据
    ============================================================================ */
 
-INSERT INTO course
-(course_name, course_code, semester, credit, total_hours, theory_hours, experiment_hours, status)
+-- 9.1 基础账号数据
+-- 说明：
+-- 1. 当前密码按现有后端的盐值规则生成：MD5('springboot' + '123456')
+-- 2. 明文密码统一为：123456
+-- 3. 老师端账号：admin
+-- 4. 学生端账号：23201321、23201322、23201323、23201324
+
+INSERT INTO sys_user
+(id, username, password_hash, real_name, role, phone, email, status)
 VALUES
-('Web 高级编程', 'WEB-ADVANCED', '2025-2026-1', 3.0, 48, 32, 16, 'ACTIVE');
+(1, 'admin', 'a384380c440fb620eb080df5cbfcd0f0', '管理员教师', 'ADMIN', '13800000000', 'admin@platform.local', 1),
+(2, '23201321', 'a384380c440fb620eb080df5cbfcd0f0', '学生23201321', 'STUDENT', '13800000021', '23201321@platform.local', 1),
+(3, '23201322', 'a384380c440fb620eb080df5cbfcd0f0', '学生23201322', 'STUDENT', '13800000022', '23201322@platform.local', 1),
+(4, '23201323', 'a384380c440fb620eb080df5cbfcd0f0', '学生23201323', 'STUDENT', '13800000023', '23201323@platform.local', 1),
+(5, '23201324', 'a384380c440fb620eb080df5cbfcd0f0', '学生23201324', 'STUDENT', '13800000024', '23201324@platform.local', 1);
+
+INSERT INTO teacher
+(id, user_id, teacher_no, teacher_name, department, title)
+VALUES
+(1, 1, 'T20250001', '管理员教师', '软件工程教研室', '讲师');
+
+INSERT INTO class_info
+(id, class_name, major, grade_year)
+VALUES
+(1, '软件工程 2023 级 1 班', '软件工程', '2023');
+
+INSERT INTO student
+(id, user_id, student_no, student_name, gender, class_id)
+VALUES
+(1, 2, '23201321', '学生23201321', '男', 1),
+(2, 3, '23201322', '学生23201322', '女', 1),
+(3, 4, '23201323', '学生23201323', '男', 1),
+(4, 5, '23201324', '学生23201324', '女', 1);
+
+-- 9.2 课程与评分规则数据
+
+INSERT INTO course
+(id, course_name, course_code, semester, credit, total_hours, theory_hours, experiment_hours, teacher_id, class_id, status)
+VALUES
+(1, 'Web 高级编程', 'WEB-ADVANCED', '2025-2026-1', 3.0, 48, 32, 16, 1, 1, 'ACTIVE');
 
 INSERT INTO assessment_item
 (course_id, item_name, item_type, full_score, weight, source_type, sort_order)
@@ -668,3 +704,13 @@ VALUES
 (1, 1, 3, 20, '大作业中的设计理解部分支撑课程目标1'),
 (1, 2, 2, 20, '实验成绩支撑课程目标2'),
 (1, 2, 3, 30, '大作业中的综合开发部分支撑课程目标2');
+
+-- 9.3 学生课程成绩初始化数据
+
+INSERT INTO course_student_score
+(course_id, student_id, score_status)
+VALUES
+(1, 1, 'DRAFT'),
+(1, 2, 'DRAFT'),
+(1, 3, 'DRAFT'),
+(1, 4, 'DRAFT');

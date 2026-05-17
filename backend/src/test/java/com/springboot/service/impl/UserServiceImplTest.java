@@ -3,6 +3,8 @@ package com.springboot.service.impl;
 import com.springboot.mapper.system.UserMapper;
 import com.springboot.model.entity.system.User;
 import com.springboot.module.auth.service.impl.UserServiceImpl;
+import com.springboot.mapper.system.ClassInfoMapper;
+import com.springboot.mapper.system.StudentMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +24,12 @@ class UserServiceImplTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private StudentMapper studentMapper;
+
+    @Mock
+    private ClassInfoMapper classInfoMapper;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -37,7 +45,7 @@ class UserServiceImplTest {
         verify(userMapper).insert(userCaptor.capture());
         User savedUser = userCaptor.getValue();
         Assertions.assertNotNull(savedUser.getId());
-        Assertions.assertEquals("用户" + savedUser.getId(), savedUser.getUserName());
+        Assertions.assertEquals("testAccount", savedUser.getRealName());
         Assertions.assertEquals(savedUser.getId(), userId);
     }
 }

@@ -1,14 +1,11 @@
 package com.springboot.module.auth.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.springboot.model.dto.auth.UserQueryRequest;
+import com.springboot.model.dto.auth.StudentRegisterRequest;
 import com.springboot.model.entity.system.User;
 import com.springboot.model.vo.auth.LoginUserVO;
 import com.springboot.model.vo.auth.UserVO;
-import java.util.List;
 import jakarta.servlet.http.HttpServletRequest;
-import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
 
 /**
  * 用户服务
@@ -27,6 +24,14 @@ public interface UserService extends IService<User> {
     long userRegister(String userAccount, String userPassword, String checkPassword);
 
     /**
+     * 学生注册
+     *
+     * @param request 学生注册请求
+     * @return 新用户 id
+     */
+    long registerStudent(StudentRegisterRequest request);
+
+    /**
      * 用户登录
      *
      * @param userAccount  用户账户
@@ -35,15 +40,6 @@ public interface UserService extends IService<User> {
      * @return 脱敏后的用户信息
      */
     LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
-
-    /**
-     * 用户登录（微信开放平台）
-     *
-     * @param wxOAuth2UserInfo 从微信获取的用户信息
-     * @param request
-     * @return 脱敏后的用户信息
-     */
-    LoginUserVO userLoginByMpOpen(WxOAuth2UserInfo wxOAuth2UserInfo, HttpServletRequest request);
 
     /**
      * 获取当前登录用户
@@ -99,21 +95,4 @@ public interface UserService extends IService<User> {
      * @return
      */
     UserVO getUserVO(User user);
-
-    /**
-     * 获取脱敏的用户信息
-     *
-     * @param userList
-     * @return
-     */
-    List<UserVO> getUserVO(List<User> userList);
-
-    /**
-     * 获取查询条件
-     *
-     * @param userQueryRequest
-     * @return
-     */
-    QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
-
 }
