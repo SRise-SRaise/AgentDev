@@ -101,34 +101,8 @@
         <!-- ===== 注册卡片 ===== -->
         <div v-else key="register" class="auth-card auth-card--wide">
           <div class="card-head">
-            <h2 class="card-title">注册账号</h2>
-            <p class="card-sub">请选择身份并填写相关信息</p>
-          </div>
-
-          <!-- 身份切换 tab -->
-          <div class="role-tabs role-tabs--top">
-            <button
-              type="button"
-              class="role-tab"
-              :class="{ active: registerForm.role === 'STUDENT' }"
-              @click="registerForm.role = 'STUDENT'"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
-              </svg>
-              学生注册
-            </button>
-            <button
-              type="button"
-              class="role-tab"
-              :class="{ active: registerForm.role === 'TEACHER' }"
-              @click="registerForm.role = 'TEACHER'"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-              </svg>
-              教师注册
-            </button>
+            <h2 class="card-title">学生注册</h2>
+            <p class="card-sub">填写账号信息完成注册</p>
           </div>
 
           <form @submit.prevent="handleRegister" class="auth-form">
@@ -179,52 +153,25 @@
             </div>
 
             <!-- 学生额外信息 -->
-            <template v-if="registerForm.role === 'STUDENT'">
-              <div class="form-section-label">学生信息</div>
-              <div class="form-grid">
-                <div class="form-group">
-                  <label class="form-label">学号 <span class="required">*</span></label>
-                  <input v-model="registerForm.studentNo" type="text" class="form-control" placeholder="请输入学号" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">性别</label>
-                  <div class="role-tabs">
-                    <button type="button" class="role-tab" :class="{ active: registerForm.gender === '男' }" @click="registerForm.gender = '男'">男</button>
-                    <button type="button" class="role-tab" :class="{ active: registerForm.gender === '女' }" @click="registerForm.gender = '女'">女</button>
-                    <button type="button" class="role-tab" :class="{ active: registerForm.gender === '' }" @click="registerForm.gender = ''">不填</button>
-                  </div>
-                </div>
-                <div class="form-group form-group--full">
-                  <label class="form-label">班级 <span class="required">*</span></label>
-                  <input v-model="registerForm.className" type="text" class="form-control" placeholder="请输入所在班级，如：软件工程2301" />
+            <div class="form-section-label">学生信息</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">学号 <span class="required">*</span></label>
+                <input v-model="registerForm.studentNo" type="text" class="form-control" placeholder="请输入学号" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">性别</label>
+                <div class="role-tabs">
+                  <button type="button" class="role-tab" :class="{ active: registerForm.gender === '男' }" @click="registerForm.gender = '男'">男</button>
+                  <button type="button" class="role-tab" :class="{ active: registerForm.gender === '女' }" @click="registerForm.gender = '女'">女</button>
+                  <button type="button" class="role-tab" :class="{ active: registerForm.gender === '' }" @click="registerForm.gender = ''">不填</button>
                 </div>
               </div>
-            </template>
-
-            <!-- 教师额外信息 -->
-            <template v-else>
-              <div class="form-section-label">教师信息</div>
-              <div class="form-grid">
-                <div class="form-group">
-                  <label class="form-label">工号</label>
-                  <input v-model="registerForm.teacherNo" type="text" class="form-control" placeholder="请输入工号" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">职称</label>
-                  <select v-model="registerForm.title" class="form-control form-select">
-                    <option value="">请选择（选填）</option>
-                    <option value="助教">助教</option>
-                    <option value="讲师">讲师</option>
-                    <option value="副教授">副教授</option>
-                    <option value="教授">教授</option>
-                  </select>
-                </div>
-                <div class="form-group form-group--full">
-                  <label class="form-label">所属院系</label>
-                  <input v-model="registerForm.department" type="text" class="form-control" placeholder="请输入所属院系或教研室（选填）" />
-                </div>
+              <div class="form-group form-group--full">
+                <label class="form-label">班级 <span class="required">*</span></label>
+                <input v-model="registerForm.className" type="text" class="form-control" placeholder="请输入所在班级，如：软件工程2301" />
               </div>
-            </template>
+            </div>
 
             <p v-if="registerError" class="form-error">{{ registerError }}</p>
             <p v-if="registerSuccess" class="form-success">{{ registerSuccess }}</p>
@@ -282,10 +229,6 @@ const registerForm = ref({
   studentNo: '',
   gender: '',
   className: '',
-  // teacher
-  teacherNo: '',
-  title: '',
-  department: '',
 })
 
 function toRegister() {
@@ -347,7 +290,7 @@ async function handleRegister() {
 
   // 公共校验
   if (!registerForm.value.username) { registerError.value = '请填写登录账号'; return }
-  if (!registerForm.value.realName) { registerError.value = '请填写真实姓名'; return }
+  if (!registerForm.value.realName) { registerError.value = '��填写真实姓名'; return }
   if (!registerForm.value.password) { registerError.value = '请设置密码'; return }
   if (registerForm.value.password !== registerForm.value.confirmPassword) {
     registerError.value = '两次密码不一致'
@@ -355,7 +298,7 @@ async function handleRegister() {
   }
   // 学生额外校验
   if (registerForm.value.role === 'STUDENT') {
-    if (!registerForm.value.studentNo) { registerError.value = '请填写学号'; return }
+    if (!registerForm.value.studentNo) { registerError.value = '���填写学号'; return }
     if (!registerForm.value.className) { registerError.value = '请填写班级'; return }
   }
 
