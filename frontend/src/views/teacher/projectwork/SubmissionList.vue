@@ -696,19 +696,19 @@ const previewShot = ref(null)
 .sl-body {
   flex: 1;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   min-height: 0;
   overflow: hidden;
 }
 
 /* 左栏 */
 .sl-list {
-  width: 380px;
+  width: 320px;
   flex-shrink: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   padding-right: 4px;
 }
 
@@ -716,10 +716,10 @@ const previewShot = ref(null)
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 14px 14px 14px 12px;
+  padding: 11px 12px 11px 10px;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }

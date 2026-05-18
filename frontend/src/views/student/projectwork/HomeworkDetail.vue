@@ -480,20 +480,20 @@ function goToReport() {
 <style scoped>
 .hd-page {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   align-items: flex-start;
   min-height: 0;
 }
 
 /* 左栏 */
 .hd-left {
-  width: 420px;
-  flex-shrink: 0;
+  flex: 5;
+  min-width: 0;
 }
 
 /* 右栏 */
 .hd-right {
-  flex: 1;
+  flex: 7;
   min-width: 0;
 }
 
@@ -746,14 +746,14 @@ function goToReport() {
 
 /* 上传区 */
 .upload-zone {
-  margin: 20px;
+  margin: 16px;
   border: 2px dashed var(--color-border);
   border-radius: var(--radius-md);
-  padding: 32px 20px;
+  padding: 22px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: border-color 0.18s, background 0.18s;
   color: var(--color-text-muted);

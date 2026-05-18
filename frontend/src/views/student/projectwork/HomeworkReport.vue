@@ -245,9 +245,7 @@ function scoreBarClass(ratio) {
 .report-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  max-width: 900px;
-  margin: 0 auto;
+  gap: 20px;
 }
 
 /* 顶部 */
@@ -371,7 +369,7 @@ function scoreBarClass(ratio) {
 /* 截图网格 */
 .screenshots-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
   padding: 18px 20px;
 }

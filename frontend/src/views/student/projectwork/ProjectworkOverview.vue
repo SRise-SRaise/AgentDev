@@ -100,8 +100,7 @@ function goToDetail(hw) {
 .pw-overview {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  max-width: 760px;
+  gap: 20px;
 }
 
 .pw-overview__header {
@@ -175,7 +174,7 @@ function goToDetail(hw) {
   line-height: 1.5;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
 }
 

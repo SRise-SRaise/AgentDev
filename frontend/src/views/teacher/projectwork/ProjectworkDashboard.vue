@@ -357,7 +357,7 @@ function publishHomework(hw) {
 /* 统计条 */
 .pw-stats {
   display: flex;
-  gap: 16px;
+  gap: 12px;
 }
 
 .pw-stat-card {
@@ -365,15 +365,15 @@ function publishHomework(hw) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 18px 20px;
+  padding: 14px 18px;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 14px;
   box-shadow: var(--shadow-sm);
 }
 
 .pw-stat-card__num {
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--color-primary);
   line-height: 1;
@@ -395,10 +395,10 @@ function publishHomework(hw) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 22px 24px;
+  padding: 18px 20px;
   box-shadow: var(--shadow-sm);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 20px;
   transition: box-shadow 0.18s, border-color 0.18s;
 }
@@ -476,7 +476,7 @@ function publishHomework(hw) {
 
 .pw-card__progress-bar {
   flex: 1;
-  height: 5px;
+  height: 7px;
   background: var(--color-border);
   border-radius: 99px;
   overflow: hidden;
@@ -498,10 +498,10 @@ function publishHomework(hw) {
 /* 卡片操作区 */
 .pw-card__actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   flex-shrink: 0;
-  align-items: flex-end;
+  align-items: center;
 }
 
 /* 状态标签 */
