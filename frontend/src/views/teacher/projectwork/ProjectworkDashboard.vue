@@ -40,7 +40,7 @@
         v-for="hw in homeworks"
         :key="hw.id"
         class="pw-card"
-        :class="{ 'pw-card--draft': hw.status === 'draft' }"
+        :class="{ 'pw-card--draft': hw.status === 'DRAFT' }"
       >
         <div class="pw-card__main">
           <div class="pw-card__top">
@@ -52,6 +52,12 @@
           </div>
 
           <div class="pw-card__meta">
+            <span class="pw-card__meta-item" v-if="hw.startTime">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              开放：{{ hw.startTime }}
+            </span>
             <span class="pw-card__meta-item">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
@@ -73,7 +79,7 @@
           </div>
 
           <!-- 提交进度条 -->
-          <div class="pw-card__progress" v-if="hw.status !== 'draft'">
+          <div class="pw-card__progress" v-if="hw.status !== 'DRAFT'">
             <div class="pw-card__progress-bar">
               <div
                 class="pw-card__progress-fill"
@@ -85,7 +91,7 @@
         </div>
 
         <div class="pw-card__actions">
-          <template v-if="hw.status === 'draft'">
+          <template v-if="hw.status === 'DRAFT'">
             <button class="btn btn--primary btn--sm" @click="publishHomework(hw)">发布</button>
             <button class="btn btn--outline btn--sm" @click="editHomework(hw)">编辑</button>
           </template>
@@ -97,7 +103,7 @@
               </svg>
             </button>
             <button class="btn btn--outline btn--sm" @click="goToGrades(hw)">成绩汇总</button>
-            <button class="btn btn--ghost btn--sm" @click="editHomework(hw)" v-if="hw.status !== 'ended'">编辑</button>
+            <button class="btn btn--ghost btn--sm" @click="editHomework(hw)" v-if="hw.status !== 'CLOSED'">编辑</button>
           </template>
         </div>
       </div>
@@ -132,18 +138,33 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">题目要求 <span class="required">*</span></label>
+              <label class="form-label">题目简介 <span class="required">*</span></label>
               <textarea
                 v-model="form.description"
                 class="form-control form-control--textarea"
+                rows="3"
+                placeholder="一两句话概括本次大作业的主题和目标..."
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">详细要求 <span class="required">*</span></label>
+              <textarea
+                v-model="form.requirement"
+                class="form-control form-control--textarea"
                 rows="6"
-                placeholder="详细描述大作业的要求、技术栈、功能要求等..."
+                placeholder="详细描述技术栈要求、功能模块、验收标准等..."
               ></textarea>
             </div>
 
             <div class="form-group">
               <label class="form-label">提交格式说明</label>
               <input v-model="form.submitFormat" class="form-control" placeholder="例如：提交 ZIP 压缩包，内含项目源码及 README" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">开放时间</label>
+              <input v-model="form.startTime" type="datetime-local" class="form-control" />
             </div>
 
             <div class="form-group">
@@ -171,8 +192,8 @@
           </div>
 
           <div class="drawer__footer">
-            <button class="btn btn--outline" @click="saveHomework('draft')">存为草稿</button>
-            <button class="btn btn--primary" @click="saveHomework('active')">
+            <button class="btn btn--outline" @click="saveHomework('DRAFT')">存为草稿</button>
+            <button class="btn btn--primary" @click="saveHomework('PUBLISHED')">
               {{ editingHw ? '保存修改' : '发布题目' }}
             </button>
           </div>
@@ -193,9 +214,11 @@ const homeworks = ref([
   {
     id: 1,
     title: 'Web 前端综合大作业',
-    description: '基于 Vue 3 + Vite 构建一个完整的前端应用，要求包含用户认证、数据可视化、响应式布局三个核心模块。',
+    description: '基于 Vue 3 + Vite 构建一个完整的前端应用，包含用户认证、数据可视化、响应式布局三个核心模块。',
+    requirement: '技术栈：Vue 3、Vite、Pinia、Vue Router。\n\n功能要求：\n1. 用户认证：注册、登录、退出，JWT 会话管理\n2. 数据可视化：至少 2 种图表，可使用 Mock 数据\n3. 响应式布局：支持桌面端与移动端，最小宽度 375px\n\n提交格式：ZIP 压缩包，包含 src 目录和 README.md，运行命令 npm install && npm run dev',
+    startTime: '2025-05-01 00:00',
     deadline: '2025-06-30 23:59',
-    status: 'active',
+    status: 'PUBLISHED',
     submissionCount: 12,
     evalCount: 8,
     submitFormat: '提交 ZIP 压缩包，包含 src 源码目录和 README.md',
@@ -211,7 +234,7 @@ const homeworks = ref([
     title: 'Python 数据分析项目',
     description: '使用 Python + Pandas + Matplotlib 完成一份完整的数据分析报告，数据集自选，分析角度不限。',
     deadline: '2025-07-15 23:59',
-    status: 'active',
+    status: 'PUBLISHED',
     submissionCount: 5,
     evalCount: 2,
     submitFormat: '提交 ZIP 包含 .ipynb 文件和数据集',
@@ -226,7 +249,7 @@ const homeworks = ref([
     title: 'React 组件库开发（草稿）',
     description: '开发一套包含至少 10 个组件的 React 组件库，提供完整文档。',
     deadline: '2025-08-01 23:59',
-    status: 'draft',
+    status: 'DRAFT',
     submissionCount: 0,
     evalCount: 0,
     submitFormat: '',
@@ -235,21 +258,21 @@ const homeworks = ref([
 ])
 
 // ---- 统计 ----
-const activeCount = computed(() => homeworks.value.filter(h => h.status === 'active').length)
+const activeCount = computed(() => homeworks.value.filter(h => h.status === 'PUBLISHED').length)
 const totalSubmissions = computed(() => homeworks.value.reduce((s, h) => s + h.submissionCount, 0))
 const pendingEval = computed(() => homeworks.value.reduce((s, h) => s + (h.submissionCount - h.evalCount), 0))
 
 // ---- 状态映射 ----
 function statusClass(status) {
   return {
-    draft: 'status-badge--gray',
-    active: 'status-badge--green',
-    ended: 'status-badge--muted',
+    DRAFT: 'status-badge--gray',
+    PUBLISHED: 'status-badge--green',
+    CLOSED: 'status-badge--muted',
   }[status] || 'status-badge--gray'
 }
 
 function statusLabel(status) {
-  return { draft: '草稿', active: '进行中', ended: '已截止' }[status] || status
+  return { DRAFT: '草稿', PUBLISHED: '进行中', CLOSED: '已截止' }[status] || status
 }
 
 // ---- 导航 ----
@@ -268,7 +291,9 @@ const editingHw = ref(null)
 const defaultForm = () => ({
   title: '',
   description: '',
+  requirement: '',
   submitFormat: '',
+  startTime: '',
   deadline: '',
   scoreItems: [{ name: '功能完整性', weight: 40 }, { name: '代码质量', weight: 30 }],
 })
@@ -286,7 +311,9 @@ function editHomework(hw) {
   form.value = {
     title: hw.title,
     description: hw.description,
+    requirement: hw.requirement || '',
     submitFormat: hw.submitFormat,
+    startTime: hw.startTime || '',
     deadline: hw.deadline,
     scoreItems: hw.scoreItems.map(s => ({ ...s })),
   }
@@ -305,15 +332,15 @@ function removeScoreItem(idx) {
   form.value.scoreItems.splice(idx, 1)
 }
 
-function saveHomework(status) {
+function saveHomework(statusKey) {
   if (!form.value.title.trim()) return
   if (editingHw.value) {
-    Object.assign(editingHw.value, { ...form.value, status })
+    Object.assign(editingHw.value, { ...form.value, status: statusKey })
   } else {
     homeworks.value.push({
       id: Date.now(),
       ...form.value,
-      status,
+      status: statusKey,
       submissionCount: 0,
       evalCount: 0,
     })
@@ -322,7 +349,7 @@ function saveHomework(status) {
 }
 
 function publishHomework(hw) {
-  hw.status = 'active'
+  hw.status = 'PUBLISHED'
 }
 </script>
 

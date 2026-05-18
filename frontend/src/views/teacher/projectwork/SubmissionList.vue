@@ -61,6 +61,7 @@
           <!-- 主信息 -->
           <div class="sl-item__body">
             <div class="sl-item__top">
+              <span class="sl-item__group">第 {{ sub.groupNo }} 组</span>
               <span class="sl-item__leader">{{ sub.leader }}</span>
               <span class="eval-status" :class="evalStatusClass(sub.evalStatus)">
                 <span class="eval-status__dot"></span>
@@ -92,7 +93,7 @@
           <!-- 触发按钮 -->
           <div class="sl-item__actions" @click.stop>
             <button
-              v-if="sub.evalStatus === 'pending'"
+              v-if="sub.evalStatus === 'SUBMITTED'"
               class="btn btn--outline btn--sm"
               @click="triggerEval(sub)"
             >
@@ -102,7 +103,7 @@
               触发评测
             </button>
             <button
-              v-else-if="sub.evalStatus === 'running'"
+              v-else-if="sub.evalStatus === 'RUNNING'"
               class="btn btn--sm btn--running"
               disabled
             >
@@ -110,7 +111,7 @@
               评测中...
             </button>
             <button
-              v-else-if="sub.evalStatus === 'done' || sub.evalStatus === 'error'"
+              v-else-if="sub.evalStatus === 'EVALUATED' || sub.evalStatus === 'REVIEWED' || sub.evalStatus === 'FAILED'"
               class="btn btn--outline btn--sm"
               @click="triggerEval(sub)"
             >重新评测</button>
@@ -134,6 +135,10 @@
           </div>
           <div class="detail-section__body">
             <div class="info-grid">
+              <div class="info-item">
+                <span class="info-item__label">组号</span>
+                <span class="info-item__value">第 {{ selectedDetail.groupNo }} 组（group_id: {{ selectedDetail.groupId }}）</span>
+              </div>
               <div class="info-item">
                 <span class="info-item__label">文件名</span>
                 <span class="info-item__value file-link">
@@ -181,7 +186,7 @@
             运行状态
           </div>
           <div class="detail-section__body">
-            <div v-if="selectedDetail.evalStatus === 'pending'" class="eval-placeholder">
+            <div v-if="selectedDetail.evalStatus === 'SUBMITTED'" class="eval-placeholder">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-subtle)" stroke-width="1.2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
@@ -250,6 +255,16 @@
             <span class="total-score">总分：<strong>{{ selectedDetail.agentScore }}</strong></span>
           </div>
           <div class="detail-section__body">
+            <!-- 总体评价 -->
+            <div class="summary-block" v-if="selectedDetail.report.summary">
+              <div class="summary-block__label">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+                总体评价
+              </div>
+              <p class="summary-block__text">{{ selectedDetail.report.summary }}</p>
+            </div>
             <div class="score-dimensions">
               <div v-for="dim in selectedDetail.report.dimensions" :key="dim.name" class="score-dim">
                 <div class="score-dim__top">
@@ -376,6 +391,8 @@ const homework = ref({
 const submissions = ref([
   {
     id: 1,
+    groupId: 101,
+    groupNo: 1,
     leader: '张三',
     members: [
       { name: '张三', studentId: '2021001', isLeader: true },
@@ -385,7 +402,7 @@ const submissions = ref([
     fileName: 'group1_vue_project.zip',
     fileSize: '12.3 MB',
     submitTime: '2025-06-28 14:22',
-    evalStatus: 'done',
+    evalStatus: 'EVALUATED',
     agentScore: 87,
     _reviewScore: 88,
     _reviewComment: '整体完成度较高，UI 细节处理得当。',
@@ -404,6 +421,7 @@ const submissions = ref([
       { url: 'https://picsum.photos/seed/s4/400/250', label: '用户管理' },
     ],
     report: {
+      summary: '整体项目完成质量较好，三个核心模块运行正常，代码结构清晰。主要不足在于错误处理不完善，文档说明有所欠缺。',
       dimensions: [
         { name: '功能完整性', score: 36, total: 40 },
         { name: '代码质量', score: 25, total: 30 },
@@ -417,6 +435,8 @@ const submissions = ref([
   },
   {
     id: 2,
+    groupId: 102,
+    groupNo: 2,
     leader: '赵六',
     members: [
       { name: '赵六', studentId: '2021004', isLeader: true },
@@ -425,7 +445,7 @@ const submissions = ref([
     fileName: 'group2_frontend.zip',
     fileSize: '8.1 MB',
     submitTime: '2025-06-29 09:15',
-    evalStatus: 'running',
+    evalStatus: 'RUNNING',
     agentScore: null,
     _reviewScore: null,
     _reviewComment: '',
@@ -442,6 +462,8 @@ const submissions = ref([
   },
   {
     id: 3,
+    groupId: 103,
+    groupNo: 3,
     leader: '孙八',
     members: [
       { name: '孙八', studentId: '2021006', isLeader: true },
@@ -452,7 +474,7 @@ const submissions = ref([
     fileName: 'group3_project.zip',
     fileSize: '15.7 MB',
     submitTime: '2025-06-29 20:30',
-    evalStatus: 'pending',
+    evalStatus: 'SUBMITTED',
     agentScore: null,
     _reviewScore: null,
     _reviewComment: '',
@@ -463,6 +485,8 @@ const submissions = ref([
   },
   {
     id: 4,
+    groupId: 104,
+    groupNo: 4,
     leader: '冯十二',
     members: [
       { name: '冯十二', studentId: '2021010', isLeader: true },
@@ -471,7 +495,7 @@ const submissions = ref([
     fileName: 'group4_hw.zip',
     fileSize: '6.5 MB',
     submitTime: '2025-06-27 16:44',
-    evalStatus: 'error',
+    evalStatus: 'FAILED',
     agentScore: null,
     _reviewScore: null,
     _reviewComment: '',
@@ -492,10 +516,11 @@ const submissions = ref([
 const currentFilter = ref('all')
 const filterOptions = [
   { label: '全部', value: 'all' },
-  { label: '待评测', value: 'pending' },
-  { label: '评测中', value: 'running' },
-  { label: '已完成', value: 'done' },
-  { label: '异常', value: 'error' },
+  { label: '待评测', value: 'SUBMITTED' },
+  { label: '评测中', value: 'RUNNING' },
+  { label: '已完成', value: 'EVALUATED' },
+  { label: '已复核', value: 'REVIEWED' },
+  { label: '异常', value: 'FAILED' },
 ]
 
 function getFilterCount(value) {
@@ -529,8 +554,8 @@ function toggleSelect(id) {
 
 function batchTrigger() {
   submissions.value.forEach(s => {
-    if (selectedIds.value.has(s.id) && s.evalStatus === 'pending') {
-      s.evalStatus = 'running'
+    if (selectedIds.value.has(s.id) && s.evalStatus === 'SUBMITTED') {
+      s.evalStatus = 'RUNNING'
     }
   })
   selectedIds.value = new Set()
@@ -538,11 +563,11 @@ function batchTrigger() {
 
 // ---- 触发评测 ----
 function triggerEval(sub) {
-  sub.evalStatus = 'running'
+  sub.evalStatus = 'RUNNING'
   // 模拟 2 秒后完成（演示用）
   setTimeout(() => {
-    if (sub.evalStatus === 'running') {
-      sub.evalStatus = 'done'
+    if (sub.evalStatus === 'RUNNING') {
+      sub.evalStatus = 'EVALUATED'
       sub.agentScore = Math.floor(Math.random() * 20) + 75
     }
   }, 2000)
@@ -551,15 +576,22 @@ function triggerEval(sub) {
 // ---- 状态映射 ----
 function evalStatusClass(status) {
   return {
-    pending: 'eval-status--gray',
-    running: 'eval-status--blue',
-    done: 'eval-status--green',
-    error: 'eval-status--red',
+    SUBMITTED: 'eval-status--gray',
+    RUNNING: 'eval-status--blue',
+    EVALUATED: 'eval-status--green',
+    REVIEWED: 'eval-status--green',
+    FAILED: 'eval-status--red',
   }[status] || 'eval-status--gray'
 }
 
 function evalStatusLabel(status) {
-  return { pending: '待评测', running: '评测中', done: '已完成', error: '异常' }[status] || status
+  return {
+    SUBMITTED: '待评测',
+    RUNNING: '评测中',
+    EVALUATED: '已完成',
+    REVIEWED: '已复核',
+    FAILED: '异常',
+  }[status] || status
 }
 
 function scoreBarClass(ratio) {
@@ -754,6 +786,16 @@ const previewShot = ref(null)
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.sl-item__group {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 1px 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
 }
 
 .sl-item__leader {
@@ -1245,6 +1287,30 @@ const previewShot = ref(null)
 .score-dim__fill--high { background: var(--color-success); }
 .score-dim__fill--mid { background: var(--color-warning); }
 .score-dim__fill--low { background: var(--color-danger); }
+
+.summary-block {
+  background: var(--color-primary-light);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+}
+
+.summary-block__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 6px;
+}
+
+.summary-block__text {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  line-height: 1.6;
+}
 
 .report-feedback {
   display: grid;

@@ -131,8 +131,8 @@
               <span v-else class="score-cell score-cell--na">—</span>
             </td>
             <td>
-              <span class="review-badge" :class="g.reviewScore !== null ? 'review-badge--done' : 'review-badge--pending'">
-                {{ g.reviewScore !== null ? '已复核' : '待复核' }}
+              <span class="review-badge" :class="scoreStatusClass(g.scoreStatus)">
+                {{ scoreStatusLabel(g.scoreStatus) }}
               </span>
             </td>
             <td>
@@ -172,6 +172,7 @@ const grades = ref([
     agentScore: 87,
     reviewScore: 88,
     finalScore: 88,
+    scoreStatus: 'CONFIRMED',
   },
   {
     id: 2,
@@ -182,6 +183,7 @@ const grades = ref([
     agentScore: 79,
     reviewScore: null,
     finalScore: null,
+    scoreStatus: 'AGENT_SCORED',
   },
   {
     id: 3,
@@ -194,6 +196,7 @@ const grades = ref([
     agentScore: null,
     reviewScore: null,
     finalScore: null,
+    scoreStatus: 'DRAFT',
   },
   {
     id: 4,
@@ -204,6 +207,7 @@ const grades = ref([
     agentScore: 91,
     reviewScore: 90,
     finalScore: 90,
+    scoreStatus: 'REVIEWED',
   },
   {
     id: 5,
@@ -215,6 +219,7 @@ const grades = ref([
     agentScore: 83,
     reviewScore: 85,
     finalScore: 85,
+    scoreStatus: 'CONFIRMED',
   },
 ])
 
@@ -224,7 +229,25 @@ const scored = computed(() => grades.value.filter(g => g.finalScore !== null).ma
 const avgScore = computed(() => scored.value.length ? Math.round(scored.value.reduce((a, b) => a + b, 0) / scored.value.length) : '—')
 const highScore = computed(() => scored.value.length ? Math.max(...scored.value) : '—')
 const lowScore = computed(() => scored.value.length ? Math.min(...scored.value) : '—')
-const reviewedCount = computed(() => grades.value.filter(g => g.reviewScore !== null).length)
+const reviewedCount = computed(() => grades.value.filter(g => g.scoreStatus === 'REVIEWED' || g.scoreStatus === 'CONFIRMED').length)
+
+function scoreStatusClass(status) {
+  return {
+    DRAFT: 'review-badge--pending',
+    AGENT_SCORED: 'review-badge--agent',
+    REVIEWED: 'review-badge--done',
+    CONFIRMED: 'review-badge--confirmed',
+  }[status] || 'review-badge--pending'
+}
+
+function scoreStatusLabel(status) {
+  return {
+    DRAFT: '待评测',
+    AGENT_SCORED: '待复核',
+    REVIEWED: '已复核',
+    CONFIRMED: '已确认',
+  }[status] || '—'
+}
 
 function goToSubmission(g) {
   router.push(`/teacher/projectwork/${homework.value.id}/submissions`)
@@ -513,6 +536,16 @@ function exportCSV() {
 .review-badge--done {
   background: #dcfce7;
   color: var(--color-success);
+}
+
+.review-badge--confirmed {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.review-badge--agent {
+  background: #fef3c7;
+  color: var(--color-warning);
 }
 
 .review-badge--pending {

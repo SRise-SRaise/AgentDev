@@ -57,6 +57,17 @@
         </div>
 
         <div class="score-detail-body">
+          <!-- 总体评价 -->
+          <div class="summary-card" v-if="report.summary">
+            <div class="summary-card__header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              Agent 总体评价
+            </div>
+            <p class="summary-card__text">{{ report.summary }}</p>
+          </div>
+
           <!-- 各维度得分 -->
           <div class="dimensions-list">
             <div v-for="dim in report.dimensions" :key="dim.name" class="dim-row">
@@ -186,6 +197,7 @@ const report = ref({
   reviewed: true,
   reviewScore: 88,
   reviewComment: '整体完成度较高，功能模块实现完整，UI 设计符合规范。建议在后续迭代中补充单元测试。',
+  summary: '该作业整体完成质量较高，三个核心模块均已实现且运行正常。代码结构清晰，组件拆分合理，状态管理规范。主要不足在于异常处理不完善，以及 README 文档缺少部署说明，建议后续补充。',
   dimensions: [
     {
       name: '功能完整性',
@@ -409,6 +421,32 @@ function scoreBarClass(ratio) {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* 总体评价 */
+.summary-card {
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.summary-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 8px;
+}
+
+.summary-card__text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text);
+  line-height: 1.65;
 }
 
 .dimensions-list {

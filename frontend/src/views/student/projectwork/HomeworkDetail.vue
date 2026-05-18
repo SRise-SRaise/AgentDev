@@ -21,8 +21,8 @@
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
             <div>
-              <span class="countdown-card__label">截止时间</span>
-              <span class="countdown-card__deadline">{{ homework.deadline }}</span>
+              <span class="countdown-card__label" v-if="homework.startTime">开放：{{ homework.startTime }}</span>
+              <span class="countdown-card__label">截止：{{ homework.deadline }}</span>
             </div>
           </div>
           <div class="countdown-card__right">
@@ -31,21 +31,26 @@
           </div>
         </div>
 
-        <!-- 题目要求 -->
-        <div class="hw-section">
+        <!-- 题目简介 -->
+        <div class="hw-section" v-if="homework.description">
           <h3 class="hw-section__title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            题目要求
+            题目简介
           </h3>
           <div class="hw-desc">{{ homework.description }}</div>
-          <div class="submit-format" v-if="homework.submitFormat">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </div>
+
+        <!-- 详细要求 -->
+        <div class="hw-section" v-if="homework.requirement">
+          <h3 class="hw-section__title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            提交格式：{{ homework.submitFormat }}
-          </div>
+            详细要求
+          </h3>
+          <div class="hw-desc hw-desc--pre">{{ homework.requirement }}</div>
         </div>
 
         <!-- 评分标准 -->
@@ -316,8 +321,10 @@ const homework = ref({
   id: 1,
   title: 'Web 前端综合大作业',
   teacher: '陈教授',
-  description: '基于 Vue 3 + Vite 构建一个完整的前端应用，要求包含以下三个核心模块：\n\n1. 用户认证模块：注册、登录、退出，使用 JWT 进行会话管理\n2. 数据可视化模块：至少包含 2 种图表类型，数据来源可以是 Mock 或真实接口\n3. 响应式布局：适配桌面端和移动端，最小支持 375px 宽度\n\n技术栈要求：Vue 3、Vite、Pinia（状态管理）、Vue Router',
+  description: '基于 Vue 3 + Vite 构建一个完整的前端应用，包含用户认证、数据可视化、响应式布局三个核心模块。',
+  requirement: '技术栈：Vue 3、Vite、Pinia、Vue Router。\n\n功能要求：\n1. 用户认证：注册、登录、退出，JWT 会话管理\n2. 数据可视化：至少 2 种图表，可使用 Mock 数据\n3. 响应式布局：支持桌面端与移动端，最小宽度 375px',
   submitFormat: '提交 ZIP 压缩包，包含 src 目录和 README.md，运行命令为 npm install && npm run dev',
+  startTime: '2025-05-01 00:00',
   deadline: '2025-06-30 23:59',
   scoreItems: [
     { name: '功能完整性', weight: 40 },
@@ -332,6 +339,8 @@ const submitState = ref('none')
 
 // 当前提交信息
 const submission = ref({
+  groupId: 101,
+  groupNo: 1,
   fileName: 'my_project.zip',
   fileSize: '9.4 MB',
   submitTime: '2025-06-28 15:30',
@@ -630,9 +639,12 @@ function goToReport() {
 }
 
 .hw-desc {
-  font-size: 0.86rem;
-  color: var(--color-text);
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
   line-height: 1.7;
+}
+
+.hw-desc--pre {
   white-space: pre-line;
 }
 
