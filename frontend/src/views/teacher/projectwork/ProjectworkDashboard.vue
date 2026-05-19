@@ -204,63 +204,60 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  listProjectworks,
+  createProjectwork,
+  updateProjectwork,
+  publishProjectwork,
+} from '@/api/projectwork/index'
 
 const router = useRouter()
 
-// ---- Mock 数据 ----
-const homeworks = ref([
-  {
-    id: 1,
-    title: 'Web 前端综合大作业',
-    description: '基于 Vue 3 + Vite 构建一个完整的前端应用，包含用户认证、数据可视化、响应式布局三个核心模块。',
-    requirement: '技术栈：Vue 3、Vite、Pinia、Vue Router。\n\n功能要求：\n1. 用户认证：注册、登录、退出，JWT 会话管理\n2. 数据可视化：至少 2 种图表，可使用 Mock 数据\n3. 响应式布局：支持桌面端与移动端，最小宽度 375px\n\n提交格式：ZIP 压缩包，包含 src 目录和 README.md，运行命令 npm install && npm run dev',
-    startTime: '2025-05-01 00:00',
-    deadline: '2025-06-30 23:59',
-    status: 'PUBLISHED',
-    submissionCount: 12,
-    evalCount: 8,
-    submitFormat: '提交 ZIP 压缩包，包含 src 源码目录和 README.md',
-    scoreItems: [
-      { name: '功能完整性', weight: 40 },
-      { name: '代码质量', weight: 30 },
-      { name: '界面设计', weight: 20 },
-      { name: '文档说明', weight: 10 },
-    ],
-  },
-  {
-    id: 2,
-    title: 'Python 数据分析项目',
-    description: '使用 Python + Pandas + Matplotlib 完成一份完整的数据分析报告，数据集自选，分析角度不限。',
-    deadline: '2025-07-15 23:59',
-    status: 'PUBLISHED',
-    submissionCount: 5,
-    evalCount: 2,
-    submitFormat: '提交 ZIP 包含 .ipynb 文件和数据集',
-    scoreItems: [
-      { name: '数据处理', weight: 35 },
-      { name: '可视化质量', weight: 35 },
-      { name: '分析深度', weight: 30 },
-    ],
-  },
-  {
-    id: 3,
-    title: 'React 组件库开发（草稿）',
-    description: '开发一套包含至少 10 个组件的 React 组件库，提供完整文档。',
-    deadline: '2025-08-01 23:59',
-    status: 'DRAFT',
-    submissionCount: 0,
-    evalCount: 0,
-    submitFormat: '',
-    scoreItems: [],
-  },
-])
+// ---- 数据 ----
+const homeworks = ref([])
+const loading = ref(false)
+const saving = ref(false)
+
+async function loadHomeworks() {
+  loading.value = true
+  try {
+    const res = await listProjectworks({ courseId: 1 })
+    homeworks.value = (res.data || []).map(normalizeHw)
+  } catch (e) {
+    console.error('[ProjectworkDashboard] loadHomeworks failed', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+function normalizeHw(h) {
+  return {
+    ...h,
+    submitFormat: h.submitFormat || '',
+    scoreItems: h.scoreItems || [],
+    submissionCount: h.submissionCount || 0,
+    evalCount: h.evalCount || 0,
+    startTime: h.startTime ? formatDatetimeLocal(h.startTime) : '',
+    deadline: h.deadline ? formatDatetimeLocal(h.deadline) : '',
+  }
+}
+
+function formatDatetimeLocal(val) {
+  if (!val) return ''
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return val
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+onMounted(() => loadHomeworks())
 
 // ---- 统计 ----
 const activeCount = computed(() => homeworks.value.filter(h => h.status === 'PUBLISHED').length)
-const totalSubmissions = computed(() => homeworks.value.reduce((s, h) => s + h.submissionCount, 0))
-const pendingEval = computed(() => homeworks.value.reduce((s, h) => s + (h.submissionCount - h.evalCount), 0))
+const totalSubmissions = computed(() => homeworks.value.reduce((s, h) => s + (h.submissionCount || 0), 0))
+const pendingEval = computed(() => homeworks.value.reduce((s, h) => s + ((h.submissionCount || 0) - (h.evalCount || 0)), 0))
 
 // ---- 状态映射 ----
 function statusClass(status) {
@@ -310,12 +307,12 @@ function editHomework(hw) {
   editingHw.value = hw
   form.value = {
     title: hw.title,
-    description: hw.description,
+    description: hw.description || '',
     requirement: hw.requirement || '',
-    submitFormat: hw.submitFormat,
+    submitFormat: hw.submitFormat || '',
     startTime: hw.startTime || '',
-    deadline: hw.deadline,
-    scoreItems: hw.scoreItems.map(s => ({ ...s })),
+    deadline: hw.deadline || '',
+    scoreItems: (hw.scoreItems || []).map(s => ({ ...s })),
   }
   drawerOpen.value = true
 }
@@ -332,24 +329,39 @@ function removeScoreItem(idx) {
   form.value.scoreItems.splice(idx, 1)
 }
 
-function saveHomework(statusKey) {
+async function saveHomework(statusKey) {
   if (!form.value.title.trim()) return
-  if (editingHw.value) {
-    Object.assign(editingHw.value, { ...form.value, status: statusKey })
-  } else {
-    homeworks.value.push({
-      id: Date.now(),
-      ...form.value,
-      status: statusKey,
-      submissionCount: 0,
-      evalCount: 0,
-    })
+  saving.value = true
+  try {
+    const payload = { ...form.value, courseId: 1 }
+    if (editingHw.value) {
+      await updateProjectwork(editingHw.value.id, payload)
+      if (statusKey === 'PUBLISHED' && editingHw.value.status !== 'PUBLISHED') {
+        await publishProjectwork(editingHw.value.id)
+      }
+    } else {
+      const res = await createProjectwork(payload)
+      const newId = res.data
+      if (statusKey === 'PUBLISHED' && newId) {
+        await publishProjectwork(newId)
+      }
+    }
+    await loadHomeworks()
+    closeDrawer()
+  } catch (e) {
+    console.error('[ProjectworkDashboard] saveHomework failed', e)
+  } finally {
+    saving.value = false
   }
-  closeDrawer()
 }
 
-function publishHomework(hw) {
-  hw.status = 'PUBLISHED'
+async function publishHomework(hw) {
+  try {
+    await publishProjectwork(hw.id)
+    hw.status = 'PUBLISHED'
+  } catch (e) {
+    console.error('[ProjectworkDashboard] publishHomework failed', e)
+  }
 }
 </script>
 

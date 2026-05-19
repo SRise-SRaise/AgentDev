@@ -95,7 +95,7 @@
             <button
               v-if="sub.evalStatus === 'SUBMITTED'"
               class="btn btn--outline btn--sm"
-              @click="triggerEval(sub)"
+              @click="handleTriggerEval(sub)"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
@@ -113,7 +113,7 @@
             <button
               v-else-if="sub.evalStatus === 'EVALUATED' || sub.evalStatus === 'REVIEWED' || sub.evalStatus === 'FAILED'"
               class="btn btn--outline btn--sm"
-              @click="triggerEval(sub)"
+              @click="handleTriggerEval(sub)"
             >重新评测</button>
           </div>
         </div>
@@ -341,7 +341,7 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                保存复核
+                保存���核
               </button>
               <span v-if="selectedDetail._reviewSaved" class="save-hint">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -376,21 +376,145 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import {
+  listSubmissions,
+  triggerEval,
+  batchTriggerEval,
+  getEvalStatus,
+  saveReview as apiSaveReview,
+  getProjectwork,
+} from '@/api/projectwork/index'
 
 const router = useRouter()
+const route = useRoute()
+const homeworkId = computed(() => Number(route.params.id) || 1)
 
-// ---- Mock 数据 ----
-const homework = ref({
-  id: 1,
-  title: 'Web 前端综合大作业',
-  deadline: '2025-06-30 23:59',
-})
+// ---- 数据 ----
+const homework = ref({ id: homeworkId.value, title: '', deadline: '' })
+const submissions = ref([])
+const loading = ref(false)
 
-const submissions = ref([
+async function loadData() {
+  loading.value = true
+  try {
+    const [hwRes, subRes] = await Promise.all([
+      getProjectwork(homeworkId.value),
+      listSubmissions(homeworkId.value),
+    ])
+    homework.value = hwRes.data || homework.value
+    submissions.value = (subRes.data || []).map(normalizeSubmission)
+    if (submissions.value.length > 0) {
+      selectedDetail.value = submissions.value[0]
+    }
+  } catch (e) {
+    console.error('[SubmissionList] loadData failed', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+function normalizeSubmission(s) {
+  // Map backend VO fields to frontend expected fields
+  const members = (s.members || []).map(m => ({
+    name: m.studentName,
+    studentId: m.studentNo,
+    isLeader: m.isLeader || m.leader,
+  }))
+  const leader = members.find(m => m.isLeader)
+
+  // Parse steps from evalOutputJson
+  let steps = []
+  if (s.evalOutputJson) {
+    try {
+      const out = JSON.parse(s.evalOutputJson)
+      if (Array.isArray(out.steps)) {
+        steps = out.steps.map(st => ({
+          name: st.name,
+          status: st.status === 'SUCCESS' ? 'done' : st.status === 'RUNNING' ? 'running' : st.status === 'FAILED' ? 'error' : 'pending',
+          time: st.duration || null,
+          log: st.log || null,
+          _expanded: false,
+        }))
+      }
+    } catch (e) {}
+  }
+
+  return {
+    id: s.id,
+    groupId: s.groupId,
+    groupNo: s.groupId,
+    leader: leader ? leader.name : '',
+    members,
+    fileName: s.fileName || '',
+    fileSize: s.fileSize || '',
+    submitTime: s.submitTime ? new Date(s.submitTime).toLocaleString('zh-CN') : '',
+    evalStatus: s.submitStatus || 'SUBMITTED',
+    agentScore: s.agentScore,
+    _reviewScore: s.teacherScore,
+    _reviewComment: s.reviewComment || '',
+    _reviewSaved: false,
+    steps,
+    screenshots: [],
+    report: null,
+    evalTaskId: s.evalTaskId,
+  }
+}
+
+onMounted(() => loadData())
+
+// ---- 轮询 ----
+let pollTimer = null
+
+function startPolling(sub) {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await getEvalStatus(homeworkId.value, sub.id)
+      const status = res.data
+      if (!status) return
+
+      // Update steps
+      if (Array.isArray(status.steps) && status.steps.length > 0) {
+        sub.steps = status.steps.map(st => ({
+          name: st.name,
+          status: st.status === 'done' ? 'done' : st.status === 'running' ? 'running' : st.status === 'error' ? 'error' : 'pending',
+          time: st.duration || null,
+          log: st.log || null,
+          _expanded: false,
+        }))
+      }
+
+      // Update screenshots
+      if (Array.isArray(status.screenshots)) {
+        sub.screenshots = status.screenshots
+      }
+
+      // Sync status
+      sub.evalStatus = status.submitStatus || sub.evalStatus
+
+      if (status.taskStatus === 'SUCCESS' || status.taskStatus === 'FAILED' || status.taskStatus === 'NONE') {
+        stopPolling()
+        // Reload to get updated scores
+        await loadData()
+      }
+    } catch (e) {
+      console.error('[SubmissionList] poll failed', e)
+    }
+  }, 3000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+onUnmounted(() => stopPolling())
+
+// ---- 以下保留 Mock 数据占位，实际数据由 loadData 填充 ----
+const _PLACEHOLDER = [
   {
-    id: 1,
+    id: -1,
     groupId: 101,
     groupNo: 1,
     leader: '张三',
@@ -534,7 +658,7 @@ const filteredSubmissions = computed(() => {
 })
 
 // ---- 选中详情 ----
-const selectedDetail = ref(submissions.value[0])
+const selectedDetail = ref(null)
 
 function selectDetail(sub) {
   selectedDetail.value = sub
@@ -552,25 +676,37 @@ function toggleSelect(id) {
   selectedIds.value = new Set(selectedIds.value)
 }
 
-function batchTrigger() {
-  submissions.value.forEach(s => {
-    if (selectedIds.value.has(s.id) && s.evalStatus === 'SUBMITTED') {
-      s.evalStatus = 'RUNNING'
-    }
+async function batchTrigger() {
+  const ids = [...selectedIds.value].filter(id => {
+    const s = submissions.value.find(s => s.id === id)
+    return s && s.evalStatus === 'SUBMITTED'
   })
-  selectedIds.value = new Set()
+  if (!ids.length) return
+  try {
+    await batchTriggerEval(homeworkId.value, ids)
+    ids.forEach(id => {
+      const s = submissions.value.find(s => s.id === id)
+      if (s) s.evalStatus = 'RUNNING'
+    })
+    selectedIds.value = new Set()
+    // Start polling the first running submission
+    const running = submissions.value.find(s => ids.includes(s.id))
+    if (running) startPolling(running)
+  } catch (e) {
+    console.error('[SubmissionList] batchTrigger failed', e)
+  }
 }
 
 // ---- 触发评测 ----
-function triggerEval(sub) {
+async function handleTriggerEval(sub) {
   sub.evalStatus = 'RUNNING'
-  // 模拟 2 秒后完成（演示用）
-  setTimeout(() => {
-    if (sub.evalStatus === 'RUNNING') {
-      sub.evalStatus = 'EVALUATED'
-      sub.agentScore = Math.floor(Math.random() * 20) + 75
-    }
-  }, 2000)
+  try {
+    await triggerEval(homeworkId.value, sub.id)
+    startPolling(sub)
+  } catch (e) {
+    console.error('[SubmissionList] triggerEval failed', e)
+    sub.evalStatus = 'FAILED'
+  }
 }
 
 // ---- 状态映射 ----
@@ -601,9 +737,18 @@ function scoreBarClass(ratio) {
 }
 
 // ---- 保存复核 ----
-function saveReview(sub) {
-  sub._reviewSaved = true
-  setTimeout(() => { sub._reviewSaved = false }, 2000)
+async function saveReview(sub) {
+  try {
+    await apiSaveReview(homeworkId.value, sub.id, {
+      teacherScore: sub._reviewScore,
+      reviewComment: sub._reviewComment,
+    })
+    sub._reviewSaved = true
+    sub.evalStatus = 'REVIEWED'
+    setTimeout(() => { sub._reviewSaved = false }, 2000)
+  } catch (e) {
+    console.error('[SubmissionList] saveReview failed', e)
+  }
 }
 
 // ---- 截图预览 ----

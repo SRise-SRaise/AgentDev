@@ -312,53 +312,90 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import {
+  getStudentHomework,
+  getStudentSubmission,
+  uploadSubmission,
+  searchStudents,
+  getEvalStatus,
+} from '@/api/projectwork/index'
 
 const router = useRouter()
 const route = useRoute()
+const homeworkId = computed(() => Number(route.params.id) || 1)
 
-// ---- Mock 数据 ----
-const homework = ref({
-  id: 1,
-  title: 'Web 前端综合大作业',
-  teacher: '陈教授',
-  description: '基于 Vue 3 + Vite 构建一个完整的前端应用，包含用户认证、数据可视化、响应式布局三个核心模块。',
-  requirement: '技术栈：Vue 3、Vite、Pinia、Vue Router。\n\n功能要求：\n1. 用户认证：注册、登录、退出，JWT 会话管理\n2. 数据可视化：至少 2 种图表，可使用 Mock 数据\n3. 响应式布局：支持桌面端与移动端，最小宽度 375px',
-  submitFormat: '提交 ZIP 压缩包，包含 src 目录和 README.md，运行命令为 npm install && npm run dev',
-  startTime: '2025-05-01 00:00',
-  deadline: '2025-06-30 23:59',
-  scoreItems: [
-    { name: '功能完整性', weight: 40 },
-    { name: '代码质量', weight: 30 },
-    { name: '界面设计', weight: 20 },
-    { name: '文档说明', weight: 10 },
-  ],
-})
-
-// 提交状态：none / submitted / running / done / resubmit
+// ---- 数据 ----
+const homework = ref({ id: homeworkId.value, title: '', deadline: '', scoreItems: [] })
 const submitState = ref('none')
+const submission = ref(null)
+const runSteps = ref([])
+let pollTimer = null
 
-// 当前提交信息
-const submission = ref({
-  groupId: 101,
-  groupNo: 1,
-  fileName: 'my_project.zip',
-  fileSize: '9.4 MB',
-  submitTime: '2025-06-28 15:30',
-  members: [
-    { name: '张三', studentId: '2021001', isLeader: true },
-    { name: '李四', studentId: '2021002', isLeader: false },
-    { name: '王五', studentId: '2021003', isLeader: false },
-  ],
-})
+async function loadData() {
+  try {
+    const hwRes = await getStudentHomework(homeworkId.value)
+    if (hwRes.data) homework.value = hwRes.data
 
-// 运行步骤（评测中用）
-const runSteps = ref([
-  { name: '解压文件', status: 'done' },
-  { name: '安装依赖', status: 'done' },
-  { name: '启动项目', status: 'running' },
-  { name: '截图采集', status: 'pending' },
-  { name: 'Agent 分析', status: 'pending' },
-])
+    const subRes = await getStudentSubmission(homeworkId.value)
+    if (subRes.data) {
+      const s = subRes.data
+      submission.value = {
+        groupId: s.groupId,
+        fileName: s.fileName || '',
+        fileSize: s.fileSize || '',
+        submitTime: s.submitTime ? new Date(s.submitTime).toLocaleString('zh-CN') : '',
+        members: (s.members || []).map(m => ({
+          name: m.studentName,
+          studentId: m.studentNo,
+          isLeader: m.isLeader,
+        })),
+      }
+      // Determine UI state based on submit status
+      const st = s.submitStatus
+      if (st === 'RUNNING') {
+        submitState.value = 'running'
+        startPolling()
+      } else if (st === 'EVALUATED' || st === 'REVIEWED') {
+        submitState.value = 'done'
+      } else if (st === 'SUBMITTED' || st === 'FAILED') {
+        submitState.value = 'submitted'
+      }
+    }
+  } catch (e) {
+    console.error('[HomeworkDetail] loadData failed', e)
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await getEvalStatus(homeworkId.value,
+        submission.value?._submissionId || homeworkId.value)
+      const status = res.data
+      if (!status) return
+      if (Array.isArray(status.steps)) {
+        runSteps.value = status.steps.map(st => ({
+          name: st.name,
+          status: st.status,
+        }))
+      }
+      if (status.taskStatus === 'SUCCESS') {
+        submitState.value = 'done'
+        stopPolling()
+      } else if (status.taskStatus === 'FAILED') {
+        submitState.value = 'submitted'
+        stopPolling()
+      }
+    } catch (e) {
+      console.error('[HomeworkDetail] poll failed', e)
+    }
+  }, 3000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
 
 // ---- 倒计时 ----
 const countdown = ref('')
@@ -368,40 +405,30 @@ function updateCountdown() {
   const now = new Date()
   const end = new Date(homework.value.deadline)
   const diff = end - now
-  if (diff <= 0) {
-    countdown.value = '已截止'
-    isUrgent.value = true
-    return
-  }
+  if (diff <= 0) { countdown.value = '已截止'; isUrgent.value = true; return }
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  if (days > 0) {
-    countdown.value = `${days} 天 ${hours} 小时`
-  } else if (hours > 0) {
-    countdown.value = `${hours} 小时 ${mins} 分`
-    if (hours < 24) isUrgent.value = true
-  } else {
-    countdown.value = `${mins} 分钟`
-    isUrgent.value = true
-  }
+  if (days > 0) countdown.value = `${days} 天 ${hours} 小时`
+  else if (hours > 0) { countdown.value = `${hours} 小时 ${mins} 分`; if (hours < 24) isUrgent.value = true }
+  else { countdown.value = `${mins} 分钟`; isUrgent.value = true }
 }
 
 let timer
 onMounted(() => {
+  loadData()
   updateCountdown()
   timer = setInterval(updateCountdown, 60000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => { clearInterval(timer); stopPolling() })
 
 // ---- 上传逻辑 ----
 const fileInputRef = ref(null)
 const uploadFile = ref(null)
 const isDragging = ref(false)
+const uploading = ref(false)
 
-function triggerFileInput() {
-  fileInputRef.value?.click()
-}
+function triggerFileInput() { fileInputRef.value?.click() }
 
 function onFileChange(e) {
   const f = e.target.files[0]
@@ -425,30 +452,23 @@ function formatSize(bytes) {
 }
 
 // ---- 小组成员 ----
-const teamMembers = ref([
-  { name: '张三', studentId: '2021001', isSelf: true },
-])
-
+const teamMembers = ref([])
 const memberSearch = ref('')
 const searchResults = ref([])
 
-// Mock 学生库
-const allStudents = [
-  { name: '李四', studentId: '2021002' },
-  { name: '王五', studentId: '2021003' },
-  { name: '赵六', studentId: '2021004' },
-  { name: '钱七', studentId: '2021005' },
-  { name: '孙八', studentId: '2021006' },
-  { name: '周九', studentId: '2021007' },
-]
-
-function searchMembers() {
-  const q = memberSearch.value.trim().toLowerCase()
+async function searchMembers() {
+  const q = memberSearch.value.trim()
   if (!q) { searchResults.value = []; return }
-  const existing = new Set(teamMembers.value.map(m => m.studentId))
-  searchResults.value = allStudents.filter(s =>
-    (s.name.includes(q) || s.studentId.includes(q)) && !existing.has(s.studentId)
-  ).slice(0, 4)
+  try {
+    const res = await searchStudents(q)
+    const existing = new Set(teamMembers.value.map(m => m.studentId))
+    searchResults.value = (res.data || [])
+      .filter(s => !existing.has(s.studentNo))
+      .slice(0, 4)
+      .map(s => ({ name: s.studentName, studentId: s.studentNo, id: s.id }))
+  } catch (e) {
+    console.error('[HomeworkDetail] searchMembers failed', e)
+  }
 }
 
 function addMember(s) {
@@ -466,23 +486,39 @@ function removeMember(studentId) {
 }
 
 // ---- 提交 ----
-function doSubmit() {
-  submission.value = {
-    fileName: uploadFile.value?.name || 'project.zip',
-    fileSize: uploadFile.value ? formatSize(uploadFile.value.size) : '—',
-    submitTime: new Date().toLocaleString('zh-CN').replace(/\//g, '-'),
-    members: teamMembers.value.map(m => ({
-      name: m.name,
-      studentId: m.studentId,
-      isLeader: m.isSelf,
-    })),
+async function doSubmit() {
+  if (!uploadFile.value || uploading.value) return
+  uploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', uploadFile.value)
+    const memberIds = teamMembers.value
+      .filter(m => !m.isSelf && m.id)
+      .map(m => m.id)
+      .join(',')
+    if (memberIds) formData.append('memberIds', memberIds)
+
+    const res = await uploadSubmission(homeworkId.value, formData)
+    const submissionId = res.data
+
+    submission.value = {
+      _submissionId: submissionId,
+      fileName: uploadFile.value.name,
+      fileSize: formatSize(uploadFile.value.size),
+      submitTime: new Date().toLocaleString('zh-CN'),
+      members: teamMembers.value.map(m => ({ name: m.name, studentId: m.studentId, isLeader: m.isSelf })),
+    }
+    uploadFile.value = null
+    submitState.value = 'submitted'
+  } catch (e) {
+    console.error('[HomeworkDetail] doSubmit failed', e)
+  } finally {
+    uploading.value = false
   }
-  uploadFile.value = null
-  submitState.value = 'running'
 }
 
 function goToReport() {
-  router.push(`/student/projectwork/${route.params.id || 1}/report`)
+  router.push(`/student/projectwork/${homeworkId.value}/report`)
 }
 </script>
 

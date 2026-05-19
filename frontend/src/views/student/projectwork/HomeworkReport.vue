@@ -1,5 +1,19 @@
 <template>
   <div class="report-page">
+    <!-- 加载中 -->
+    <div v-if="loading" style="padding:60px;text-align:center;color:var(--color-text-muted)">
+      报告加载中...
+    </div>
+    <!-- 加载失败 -->
+    <div v-else-if="error" style="padding:60px;text-align:center;color:var(--color-danger)">
+      {{ error }}
+    </div>
+    <!-- 报告未生成 -->
+    <div v-else-if="!report" style="padding:60px;text-align:center;color:var(--color-text-muted)">
+      评测报告尚未生成，请等待 Agent 评测完成后刷新。
+    </div>
+
+    <template v-else>
     <!-- 顶部导航 -->
     <div class="report-header">
       <button class="btn-back" @click="router.back()">
@@ -178,71 +192,63 @@
         </button>
       </div>
     </transition>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { getStudentReport, getStudentHomework } from '@/api/projectwork/index'
 
 const router = useRouter()
+const route = useRoute()
+const homeworkId = computed(() => Number(route.params.id) || 1)
 
-const homework = ref({
-  id: 1,
-  title: 'Web 前端综合大作业',
-})
+// ---- 数据 ----
+const homework = ref({ id: homeworkId.value, title: '' })
+const report = ref(null)
+const loading = ref(false)
+const error = ref(null)
 
-const report = ref({
-  agentScore: 87,
-  reviewed: true,
-  reviewScore: 88,
-  reviewComment: '整体完成度较高，功能模块实现完整，UI 设计符合规范。建议在后续迭代中补充单元测试。',
-  summary: '该作业整体完成质量较高，三个核心模块均已实现且运行正常。\n代码结构清晰，组件拆分合理，状态管理规范。\n主要不足在于异常处理不完善，以及 README 文档缺少部署说明，建议后续补充。',
-  dimensions: [
-    {
-      name: '功能完整性',
-      score: 36,
-      total: 40,
-      comment: '三个核心模块（用户认证、数据可视化、响应式布局）均已实现，数据可视化部分超出预期。',
-    },
-    {
-      name: '代码质量',
-      score: 25,
-      total: 30,
-      comment: '组件拆分合理，Pinia 状态管理使用规范，部分函数缺少注释。',
-    },
-    {
-      name: '界面设计',
-      score: 18,
-      total: 20,
-      comment: '视觉风格统一，响应式适配良好，最小宽度 375px 已验证。',
-    },
-    {
-      name: '文档说明',
-      score: 8,
-      total: 10,
-      comment: 'README 包含安装和运行说明，缺少环境变量配置说明。',
-    },
-  ],
-  pros: [
-    '路由设计合理，页面跳转流畅',
-    'Pinia 状态管理使用规范',
-    '响应式布局适配良好，移动端体验一致',
-    '数据可视化图表类型丰富（折线图 + 饼图）',
-  ],
-  cons: [
-    '部分异步操作缺少 loading 状态和错误处理',
-    'README 中缺少环境变量说明和部署步骤',
-    '未编写单元测试',
-  ],
-  suggestion: '建议补充全局错误处理逻辑（可使用 axios 拦截器统一处理），并在 README 中增加环境变量说明（.env.example）。后续可考虑接入 Vitest 编写关键业务逻辑的单元测试，以提升代码健壮性。',
-  screenshots: [
-    { url: 'https://picsum.photos/seed/rpt1/600/375', label: '首页' },
-    { url: 'https://picsum.photos/seed/rpt2/600/375', label: '登录页' },
-    { url: 'https://picsum.photos/seed/rpt3/600/375', label: '数据看板' },
-    { url: 'https://picsum.photos/seed/rpt4/600/375', label: '用户管理' },
-  ],
-})
+async function loadData() {
+  loading.value = true
+  error.value = null
+  try {
+    const [hwRes, rptRes] = await Promise.all([
+      getStudentHomework(homeworkId.value),
+      getStudentReport(homeworkId.value),
+    ])
+    if (hwRes.data) homework.value = hwRes.data
+    if (rptRes.data) {
+      const d = rptRes.data
+      report.value = {
+        agentScore: d.agentScore,
+        reviewed: d.reviewed,
+        reviewScore: d.teacherScore,
+        reviewComment: d.reviewComment,
+        summary: d.summary,
+        dimensions: (d.dimensions || []).map(dim => ({
+          name: dim.name,
+          score: dim.score,
+          total: dim.total,
+          comment: dim.reason,
+        })),
+        pros: d.pros || (d.advantage ? d.advantage.split(/\n|。/).filter(Boolean) : []),
+        cons: d.cons || (d.problem ? d.problem.split(/\n|。/).filter(Boolean) : []),
+        suggestion: d.suggestion,
+        screenshots: (d.screenshots || []).map(s => ({ url: s.url, label: s.label })),
+      }
+    }
+  } catch (e) {
+    console.error('[HomeworkReport] loadData failed', e)
+    error.value = '报告加载失败，请稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => loadData())
 
 const previewShot = ref(null)
 
