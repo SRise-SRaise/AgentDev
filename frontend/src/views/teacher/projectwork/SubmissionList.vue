@@ -190,7 +190,7 @@
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-subtle)" stroke-width="1.2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              <p>尚未触发评测，点击「触发评测」开始</p>
+              <p>尚未触发评测���点击「触发评测」开始</p>
             </div>
             <div v-else class="steps-track">
               <div
@@ -341,7 +341,7 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                保存复核
+                保存���核
               </button>
               <span v-if="selectedDetail._reviewSaved" class="save-hint">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -421,7 +421,7 @@ const submissions = ref([
       { url: 'https://picsum.photos/seed/s4/400/250', label: '用户管理' },
     ],
     report: {
-      summary: '整体项目完成质量较好，三个核心模块运行正常，代码结构清晰。主要不足在于错误处理不完善，文档说明有所欠缺。',
+      summary: '整体项目完成质量较好，三个核心模块运行正常，代码结构清晰。\n主要不足在于错误处理不完善，文档说明有所欠缺。',
       dimensions: [
         { name: '功能完整性', score: 36, total: 40 },
         { name: '代码质量', score: 25, total: 30 },
@@ -1309,7 +1309,8 @@ const previewShot = ref(null)
   margin: 0;
   font-size: 0.84rem;
   color: var(--color-text);
-  line-height: 1.6;
+  line-height: 1.75;
+  white-space: pre-line;
 }
 
 .report-feedback {

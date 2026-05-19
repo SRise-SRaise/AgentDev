@@ -197,7 +197,7 @@ const report = ref({
   reviewed: true,
   reviewScore: 88,
   reviewComment: '整体完成度较高，功能模块实现完整，UI 设计符合规范。建议在后续迭代中补充单元测试。',
-  summary: '该作业整体完成质量较高，三个核心模块均已实现且运行正常。代码结构清晰，组件拆分合理，状态管理规范。主要不足在于异常处理不完善，以及 README 文档缺少部署说明，建议后续补充。',
+  summary: '该作业整体完成质量较高，三个核心模块均已实现且运行正常。\n代码结构清晰，组件拆分合理，状态管理规范。\n主要不足在于异常处理不完善，以及 README 文档缺少部署说明，建议后续补充。',
   dimensions: [
     {
       name: '功能完整性',
@@ -446,7 +446,8 @@ function scoreBarClass(ratio) {
   margin: 0;
   font-size: 0.88rem;
   color: var(--color-text);
-  line-height: 1.65;
+  line-height: 1.75;
+  white-space: pre-line;
 }
 
 .dimensions-list {
