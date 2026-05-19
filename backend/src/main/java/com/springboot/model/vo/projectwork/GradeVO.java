@@ -2,7 +2,7 @@ package com.springboot.model.vo.projectwork;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Data;
 
@@ -22,7 +22,7 @@ public class GradeVO implements Serializable {
     private BigDecimal finalScore;
     private String scoreStatus;
     private String reviewComment;
-    private Date confirmedAt;
+    private LocalDateTime confirmedAt;
 
     private List<SubmissionVO.MemberVO> members;
 }

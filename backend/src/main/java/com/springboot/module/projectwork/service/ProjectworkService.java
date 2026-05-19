@@ -136,13 +136,19 @@ public class ProjectworkService {
 
     public List<SubmissionVO> listSubmissions(Long assignmentId) {
         List<Map<String, Object>> rows = submissionMapper.selectDetailsByAssignment(assignmentId);
-        return rows.stream().map(row -> {
+        Map<Long, Integer> groupNoMap = new LinkedHashMap<>();
+        int[] counter = {1};
+        List<SubmissionVO> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
             SubmissionVO vo = mapToSubmissionVO(row);
             if (vo.getGroupId() != null) {
-                vo.setMembers(loadMembers(vo.getGroupId(), vo.getGroupId()));
+                groupNoMap.computeIfAbsent(vo.getGroupId(), k -> counter[0]++);
+                vo.setGroupNo(groupNoMap.get(vo.getGroupId()));
+                vo.setMembers(loadMembers(vo.getGroupId(), vo.getSubmitStudentId()));
             }
-            return vo;
-        }).collect(Collectors.toList());
+            result.add(vo);
+        }
+        return result;
     }
 
     public SubmissionVO getSubmission(Long assignmentId, Long submissionId) {
@@ -150,7 +156,7 @@ public class ProjectworkService {
         if (row == null) throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Submission not found");
         SubmissionVO vo = mapToSubmissionVO(row);
         if (vo.getGroupId() != null) {
-            vo.setMembers(loadMembers(vo.getGroupId(), vo.getGroupId()));
+            vo.setMembers(loadMembers(vo.getGroupId(), vo.getSubmitStudentId()));
         }
         return vo;
     }
@@ -444,7 +450,7 @@ public class ProjectworkService {
         if (row == null) return null;
         SubmissionVO vo = mapToSubmissionVO(row);
         if (vo.getGroupId() != null) {
-            vo.setMembers(loadMembers(vo.getGroupId(), vo.getGroupId()));
+            vo.setMembers(loadMembers(vo.getGroupId(), vo.getSubmitStudentId()));
         }
         return vo;
     }
@@ -552,6 +558,10 @@ public class ProjectworkService {
         vo.setId(toLong(row.get("id")));
         vo.setAssignmentId(toLong(row.get("assignment_id")));
         vo.setGroupId(toLong(row.get("group_id")));
+        Object gnObj = row.get("group_no");
+        if (gnObj != null) {
+            try { vo.setGroupNo(Integer.parseInt(gnObj.toString())); } catch (Exception ignored) {}
+        }
         vo.setSubmitStudentId(toLong(row.get("submit_student_id")));
         vo.setZipFileId(toLong(row.get("zip_file_id")));
         vo.setFileName(str(row.get("file_name")));

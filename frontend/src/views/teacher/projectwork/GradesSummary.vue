@@ -151,81 +151,70 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { getProjectwork, getGrades, exportGrades } from '@/api/projectwork/index.js'
 
 const router = useRouter()
+const route = useRoute()
 
-const homework = ref({
-  id: 1,
-  title: 'Web 前端综合大作业',
-})
+const homeworkId = computed(() => Number(route.params.id))
 
-const grades = ref([
-  {
-    id: 1,
-    members: [
-      { name: '张三', studentId: '2021001', isLeader: true },
-      { name: '李四', studentId: '2021002', isLeader: false },
-      { name: '王五', studentId: '2021003', isLeader: false },
-    ],
-    agentScore: 87,
-    reviewScore: 88,
-    finalScore: 88,
-    scoreStatus: 'CONFIRMED',
-  },
-  {
-    id: 2,
-    members: [
-      { name: '赵六', studentId: '2021004', isLeader: true },
-      { name: '钱七', studentId: '2021005', isLeader: false },
-    ],
-    agentScore: 79,
-    reviewScore: null,
-    finalScore: null,
-    scoreStatus: 'AGENT_SCORED',
-  },
-  {
-    id: 3,
-    members: [
-      { name: '孙八', studentId: '2021006', isLeader: true },
-      { name: '周九', studentId: '2021007', isLeader: false },
-      { name: '吴十', studentId: '2021008', isLeader: false },
-      { name: '郑十一', studentId: '2021009', isLeader: false },
-    ],
-    agentScore: null,
-    reviewScore: null,
-    finalScore: null,
-    scoreStatus: 'DRAFT',
-  },
-  {
-    id: 4,
-    members: [
-      { name: '冯十二', studentId: '2021010', isLeader: true },
-      { name: '陈十三', studentId: '2021011', isLeader: false },
-    ],
-    agentScore: 91,
-    reviewScore: 90,
-    finalScore: 90,
-    scoreStatus: 'REVIEWED',
-  },
-  {
-    id: 5,
-    members: [
-      { name: '褚十四', studentId: '2021012', isLeader: true },
-      { name: '卫十五', studentId: '2021013', isLeader: false },
-      { name: '蒋十六', studentId: '2021014', isLeader: false },
-    ],
-    agentScore: 83,
-    reviewScore: 85,
-    finalScore: 85,
-    scoreStatus: 'CONFIRMED',
-  },
-])
+const homework = ref({ id: null, title: '' })
+const loading = ref(false)
+
+// 后端返回的是按学生行的列表，前端按 groupId 聚合为小组行
+const grades = ref([])
+
+async function loadData() {
+  loading.value = true
+  try {
+    const [hwRes, gradesRes] = await Promise.all([
+      getProjectwork(homeworkId.value),
+      getGrades(homeworkId.value),
+    ])
+    homework.value = hwRes.data || {}
+
+    // 按 groupId 聚合：每个小组取一行代表，members 列表合并
+    const groupMap = new Map()
+    for (const row of (gradesRes.data || [])) {
+      const gid = row.groupId ?? row.groupNo ?? 'solo_' + row.studentId
+      if (!groupMap.has(gid)) {
+        groupMap.set(gid, {
+          id: gid,
+          groupId: row.groupId,
+          groupNo: row.groupNo,
+          submissionId: row.submissionId,
+          agentScore: row.agentScore,
+          reviewScore: row.teacherScore,
+          finalScore: row.finalScore,
+          scoreStatus: row.scoreStatus,
+          members: [],
+        })
+      }
+      groupMap.get(gid).members.push({
+        name: row.studentName,
+        studentId: row.studentNo,
+        isLeader: false, // 组长信息由 submission 的 submitStudentId 决定，此处暂以排在首位表示
+      })
+    }
+    // 将 members 第一个标记为组长（后端 loadMembers 按 roleName 排序，但 grade 接口没带 role）
+    grades.value = [...groupMap.values()].map(g => {
+      if (g.members.length > 0) g.members[0].isLeader = true
+      return g
+    })
+  } catch (e) {
+    console.error('[GradesSummary] loadData error', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => loadData())
 
 // 统计
 const totalGroups = computed(() => grades.value.length)
-const scored = computed(() => grades.value.filter(g => g.finalScore !== null).map(g => g.finalScore))
+const scored = computed(() => grades.value.filter(g => g.finalScore != null).map(g => Number(g.finalScore)))
 const avgScore = computed(() => scored.value.length ? Math.round(scored.value.reduce((a, b) => a + b, 0) / scored.value.length) : '—')
 const highScore = computed(() => scored.value.length ? Math.max(...scored.value) : '—')
 const lowScore = computed(() => scored.value.length ? Math.min(...scored.value) : '—')
@@ -250,23 +239,22 @@ function scoreStatusLabel(status) {
 }
 
 function goToSubmission(g) {
-  router.push(`/teacher/projectwork/${homework.value.id}/submissions`)
+  router.push(`/teacher/projectwork/${homeworkId.value}/submissions`)
 }
 
-function exportCSV() {
-  const header = '序号,组长,成员,Agent初评分,教师复核分,最终成绩\n'
-  const rows = grades.value.map((g, i) => {
-    const leader = g.members.find(m => m.isLeader)?.name || ''
-    const others = g.members.filter(m => !m.isLeader).map(m => m.name).join('/')
-    return `${i + 1},${leader},${others},${g.agentScore ?? ''},${g.reviewScore ?? ''},${g.finalScore ?? ''}`
-  }).join('\n')
-  const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${homework.value.title}_成绩单.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+async function exportCSV() {
+  try {
+    const res = await exportGrades(homeworkId.value)
+    const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${homework.value.title || 'grades'}_成绩单.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('[GradesSummary] export error', e)
+  }
 }
 </script>
 

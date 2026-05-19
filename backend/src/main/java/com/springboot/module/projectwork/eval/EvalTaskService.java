@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.springboot.common.ErrorCode;
 import com.springboot.exception.BusinessException;
+import com.springboot.mapper.file.FileResourceMapper;
 import com.springboot.mapper.projectwork.AgentEvalTaskMapper;
 import com.springboot.mapper.projectwork.ProjectAssignmentMapper;
 import com.springboot.mapper.projectwork.ProjectSubmissionMapper;
+import com.springboot.model.entity.file.FileResource;
 import com.springboot.model.entity.projectwork.AgentEvalTask;
 import com.springboot.model.entity.projectwork.ProjectAssignment;
 import com.springboot.model.entity.projectwork.ProjectSubmission;
@@ -37,6 +39,7 @@ public class EvalTaskService {
     private final ProjectSubmissionMapper submissionMapper;
     private final ProjectAssignmentMapper assignmentMapper;
     private final AgentEvalTaskMapper agentEvalTaskMapper;
+    private final FileResourceMapper fileResourceMapper;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
 
@@ -131,7 +134,14 @@ public class EvalTaskService {
     }
 
     private String resolveZipPath(Long zipFileId) {
-        // TODO: replace with file_resource table lookup after file upload module is done
-        return storageRootPath + "/uploads/project_zip/" + zipFileId + ".zip";
+        if (zipFileId == null) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "Submission has no associated file");
+        }
+        FileResource fr = fileResourceMapper.selectById(zipFileId);
+        if (fr == null || fr.getStoragePath() == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR,
+                    "File record not found for id=" + zipFileId);
+        }
+        return fr.getStoragePath();
     }
 }

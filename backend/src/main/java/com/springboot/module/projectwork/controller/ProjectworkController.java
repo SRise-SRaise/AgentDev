@@ -13,6 +13,9 @@ import com.springboot.module.projectwork.service.ProjectworkService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -126,5 +129,30 @@ public class ProjectworkController {
     @GetMapping("/{id}/grades")
     public BaseResponse<List<GradeVO>> getGrades(@PathVariable Long id) {
         return ResultUtils.success(projectworkService.listGrades(id));
+    }
+
+    @GetMapping("/{id}/grades/export")
+    public ResponseEntity<byte[]> exportGrades(@PathVariable Long id) {
+        List<GradeVO> grades = projectworkService.listGrades(id);
+        StringBuilder sb = new StringBuilder("\uFEFF"); // BOM for Excel UTF-8
+        sb.append("学号,姓名,小组编号,Agent初评分,教师复核分,最终成绩,状态\n");
+        for (GradeVO g : grades) {
+            sb.append(nullSafe(g.getStudentNo())).append(',')
+              .append(nullSafe(g.getStudentName())).append(',')
+              .append(g.getGroupNo() != null ? g.getGroupNo() : "").append(',')
+              .append(g.getAgentScore() != null ? g.getAgentScore().toPlainString() : "").append(',')
+              .append(g.getTeacherScore() != null ? g.getTeacherScore().toPlainString() : "").append(',')
+              .append(g.getFinalScore() != null ? g.getFinalScore().toPlainString() : "").append(',')
+              .append(nullSafe(g.getScoreStatus())).append('\n');
+        }
+        byte[] bytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"grades.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(bytes);
+    }
+
+    private String nullSafe(String s) {
+        return s == null ? "" : s;
     }
 }
