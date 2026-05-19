@@ -256,7 +256,7 @@ public class DockerRunnerService {
         boolean isFullstack = "FULLSTACK".equalsIgnoreCase(props.getProjectType());
 
         if (!isFullstack) {
-            return new FullstackContext(null, null, startFrontendContainer(projectDir, null));
+            return new FullstackContext(null, null, startFrontendContainer(projectDir));
         }
 
         Path frontendDir = projectDir.resolve("frontend");
@@ -264,29 +264,40 @@ public class DockerRunnerService {
 
         if (!Files.isDirectory(frontendDir) || !Files.isDirectory(backendDir)) {
             log.warn("[DockerRunner] FULLSTACK: frontend/ or backend/ missing, falling back to FRONTEND_ONLY");
-            return new FullstackContext(null, null, startFrontendContainer(projectDir, null));
+            return new FullstackContext(null, null, startFrontendContainer(projectDir));
         }
 
-        String networkId = ensureNetwork(props.getSharedNetworkName());
+        ensureNetwork(props.getSharedNetworkName());
 
-        // Detect DB and start sidecar first so it has maximum warm-up time
+        // Step A: detect DB dependency
         DbType dbType = props.isDbSidecarEnabled()
                 ? detectDatabase(backendDir)
                 : DbType.NONE;
 
+        // Step B: start DB sidecar (if needed) and wait for it to accept TCP connections
+        // BEFORE starting the backend — otherwise the backend will fail to connect on boot.
         ContainerContext dbCtx = startDbContainer(dbType, props.getSharedNetworkName());
+        if (dbCtx != null) {
+            log.info("[DockerRunner] Waiting for DB sidecar ({}) to be ready...", dbType);
+            waitForDbReady(dbCtx, props.getDbStartupTimeout());
+            log.info("[DockerRunner] DB sidecar ready, starting backend now");
+        }
 
+        // Step C: start backend (DB is now ready, env vars already injected)
         List<String> backendEnv = buildBackendEnv(dbType);
-        ContainerContext backendCtx  = startBackendContainer(backendDir, networkId, backendEnv);
-        ContainerContext frontendCtx = startFrontendContainer(frontendDir, networkId);
+        ContainerContext backendCtx  = startBackendContainer(backendDir, backendEnv);
+
+        // Step D: start frontend (backend is booting, will be waited on in Consumer)
+        ContainerContext frontendCtx = startFrontendContainer(frontendDir);
 
         return new FullstackContext(dbCtx, backendCtx, frontendCtx);
     }
 
-    private ContainerContext startBackendContainer(Path backendDir, String networkId,
+    private ContainerContext startBackendContainer(Path backendDir,
                                                    List<String> extraEnv) throws Exception {
         int hostPort = findFreePort();
         int containerPort = props.getBackendPort();
+        String networkName = props.getSharedNetworkName();
 
         ExposedPort exposed = ExposedPort.tcp(containerPort);
         Ports portBindings = new Ports();
@@ -298,7 +309,7 @@ public class DockerRunnerService {
                 .withMemory(props.getContainerMemoryLimit())
                 .withCpuPeriod(100000L)
                 .withCpuQuota(50000L)
-                .withNetworkMode(networkId != null ? props.getSharedNetworkName() : "bridge");
+                .withNetworkMode(networkName);
 
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(props.getBackendImage())
@@ -313,14 +324,15 @@ public class DockerRunnerService {
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
-        log.info("[DockerRunner] Backend container started: {} hostPort={} dbEnvVars={}",
-                containerId, hostPort, extraEnv.size());
+        log.info("[DockerRunner] Backend container started: {} hostPort={} dbEnvVars={} network={}",
+                containerId, hostPort, extraEnv.size(), networkName);
         return new ContainerContext(containerId, hostPort, backendDir, "backend");
     }
 
-    private ContainerContext startFrontendContainer(Path frontendDir, String networkId) throws Exception {
+    private ContainerContext startFrontendContainer(Path frontendDir) throws Exception {
         int hostPort = findFreePort();
         int containerPort = props.getFrontendPort();
+        String networkName = props.getSharedNetworkName();
 
         ExposedPort exposed = ExposedPort.tcp(containerPort);
         Ports portBindings = new Ports();
@@ -332,7 +344,7 @@ public class DockerRunnerService {
                 .withMemory(props.getContainerMemoryLimit())
                 .withCpuPeriod(100000L)
                 .withCpuQuota(50000L)
-                .withNetworkMode(networkId != null ? props.getSharedNetworkName() : "bridge");
+                .withNetworkMode(networkName);
 
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(props.getFrontendImage())
@@ -345,7 +357,8 @@ public class DockerRunnerService {
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
-        log.info("[DockerRunner] Frontend container started: {} hostPort={}", containerId, hostPort);
+        log.info("[DockerRunner] Frontend container started: {} hostPort={} network={}",
+                containerId, hostPort, networkName);
         return new ContainerContext(containerId, hostPort, frontendDir, "frontend");
     }
 
@@ -389,14 +402,17 @@ public class DockerRunnerService {
         if (ctx.getBackendCtx()  != null) cleanupContainer(ctx.getBackendCtx());
         if (ctx.getDbCtx()       != null) cleanupContainer(ctx.getDbCtx());
 
-        // Remove unzipped project directory (parent of frontend/ backend/)
+        // Remove unzipped project directory.
+        // - FULLSTACK: frontendCtx.projectDir = {root}/task_xxx/frontend/  -> go up one level
+        // - FRONTEND_ONLY: frontendCtx.projectDir = {root}/task_xxx/       -> use directly
         if (ctx.getFrontendCtx() != null && ctx.getFrontendCtx().getProjectDir() != null) {
-            Path parent = ctx.getFrontendCtx().getProjectDir().getParent();
-            deleteDirectory(parent != null ? parent.toFile()
-                    : ctx.getFrontendCtx().getProjectDir().toFile());
+            Path dir = ctx.getFrontendCtx().getProjectDir();
+            boolean isSubdir = ctx.getBackendCtx() != null; // fullstack has a backend sibling
+            deleteDirectory((isSubdir && dir.getParent() != null
+                    ? dir.getParent() : dir).toFile());
         }
 
-        // Remove shared network (best effort)
+        // Remove shared network (best effort — it may not exist in FRONTEND_ONLY mode)
         try {
             dockerManager.getClient().removeNetworkCmd(props.getSharedNetworkName()).exec();
         } catch (Exception ignored) {}

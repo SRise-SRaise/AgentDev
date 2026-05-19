@@ -102,20 +102,12 @@ public class EvalTaskConsumer {
             updateSteps(taskId, "Start Containers", "RUNNING");
             fullstackCtx = dockerRunnerService.startContainers(projectDir);
 
-            // Step 2a: Wait for DB sidecar (if any)
-            if (fullstackCtx.getDbCtx() != null) {
-                log.info("[EvalConsumer][Step2a] Wait for DB sidecar ready");
-                updateSteps(taskId, "Start DB", "RUNNING");
-                dockerRunnerService.waitForDbReady(
-                        fullstackCtx.getDbCtx(), props.getDbStartupTimeout());
-                updateSteps(taskId, "Start DB", "SUCCESS");
-            } else {
-                updateSteps(taskId, "Start DB", "SKIPPED");
-            }
+            // Step 2a: DB sidecar — already waited inside startContainers(), just update step status
+            updateSteps(taskId, "Start DB", fullstackCtx.getDbCtx() != null ? "SUCCESS" : "SKIPPED");
 
-            // Step 2b: Wait for backend ready
+            // Step 2b: Wait for backend HTTP ready (DB is already up, backend is booting)
             if (fullstackCtx.getBackendCtx() != null) {
-                log.info("[EvalConsumer][Step2b] Wait for backend ready");
+                log.info("[EvalConsumer][Step2b] Wait for backend HTTP ready");
                 updateSteps(taskId, "Start Backend", "RUNNING");
                 dockerRunnerService.waitForReady(
                         fullstackCtx.getBackendCtx(), props.getBackendStartupTimeout());
