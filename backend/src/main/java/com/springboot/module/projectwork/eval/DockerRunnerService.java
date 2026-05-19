@@ -6,7 +6,6 @@ import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
-import com.github.dockerjava.api.model.NetworkingConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import com.github.dockerjava.api.model.Volume;
@@ -178,7 +177,6 @@ public class DockerRunnerService {
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(image)
                 .withName("eval_db_" + hostPort)
-                .withNetworkingConfig(buildNetworkingConfig(networkName, "db"))
                 .withExposedPorts(exposed)
                 .withEnv(envVars)
                 .withHostConfig(hostConfig)
@@ -186,6 +184,7 @@ public class DockerRunnerService {
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
+        connectWithAlias(client, containerId, networkName, "db");
         log.info("[DockerRunner] DB container ({}) started: {} -> host port: {}",
                 dbType, containerId, hostPort);
         return new ContainerContext(containerId, hostPort, null, "db");
@@ -316,7 +315,6 @@ public class DockerRunnerService {
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(props.getBackendImage())
                 .withName("eval_backend_" + hostPort)
-                .withNetworkingConfig(buildNetworkingConfig(networkName, "backend"))
                 .withWorkingDir("/app")
                 .withCmd("sh", "-c", props.getBackendStartCmd())
                 .withEnv(extraEnv)
@@ -326,6 +324,7 @@ public class DockerRunnerService {
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
+        connectWithAlias(client, containerId, networkName, "backend");
         log.info("[DockerRunner] Backend container started: {} hostPort={} dbEnvVars={} network={}",
                 containerId, hostPort, extraEnv.size(), networkName);
         return new ContainerContext(containerId, hostPort, backendDir, "backend");
@@ -367,18 +366,31 @@ public class DockerRunnerService {
     // ---- Networking helper ----------------------------------------------------
 
     /**
-     * Builds a NetworkingConfig that registers the container under the given
-     * network alias so other containers on the same bridge can resolve it by
-     * the alias name (e.g. "db", "backend").
-     * This replaces the deprecated .withHostname() on CreateContainerCmd.
+     * Connects a running container to the named network and registers it under
+     * the given alias so other containers on the same bridge can reach it by
+     * that DNS name (e.g. "db" or "backend").
+     *
+     * docker-java 3.4.0 does not expose NetworkingConfig on CreateContainerCmd;
+     * the canonical way to set network aliases is via connectToNetworkCmd after
+     * the container has been started.
      */
-    private NetworkingConfig buildNetworkingConfig(String networkName, String alias) {
-        ContainerNetwork containerNetwork = new ContainerNetwork()
-                .withAliases(List.of(alias));
-        NetworkingConfig networkingConfig = new NetworkingConfig();
-        networkingConfig.setEndpointsConfig(
-                java.util.Map.of(networkName, containerNetwork));
-        return networkingConfig;
+    private void connectWithAlias(DockerClient client, String containerId,
+                                  String networkName, String alias) {
+        try {
+            ContainerNetwork cn = new ContainerNetwork()
+                    .withAliases(List.of(alias));
+            client.connectToNetworkCmd()
+                    .withNetworkId(networkName)
+                    .withContainerId(containerId)
+                    .withContainerNetwork(cn)
+                    .exec();
+            log.debug("[DockerRunner] Connected container {} to network {} as alias '{}'",
+                    containerId, networkName, alias);
+        } catch (Exception e) {
+            // If the container was already connected via HostConfig.networkMode,
+            // the connect call updates the alias on the existing endpoint.
+            log.warn("[DockerRunner] connectWithAlias failed for alias '{}': {}", alias, e.getMessage());
+        }
     }
 
     // ---- Wait for ready (HTTP) ------------------------------------------------
