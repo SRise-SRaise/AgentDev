@@ -87,6 +87,21 @@ ai:
     embedding:
       model: embedding-2
 
+# Projectwork Agent AI config (isolated from global spring.ai)
+projectwork:
+  ai:
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    api-key: 9a4d2bdf37d643209dcf9a685317141f.ubYYIPoJU0l3BcuF
+    fast-model: glm-4-flash
+    smart-model: glm-4-plus
+  eval:
+    container-startup-timeout: 120
+    task-timeout: 180
+    screenshot-wait-ms: 3000
+    container-memory-limit: 536870912
+    unzip-root: ${app.storage.root-path}/project_unzip
+    screenshot-root: ${app.storage.root-path}/screenshots
+
 docker:
   host: unix:///var/run/docker.sock
   tls-verify: false
@@ -105,3 +120,4 @@ knife4j:
         api-rule-resources:
           - com.springboot.module
           - com.springboot.template.controller
+          - com.springboot.module.projectwork.controller

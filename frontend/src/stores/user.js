@@ -57,6 +57,12 @@ export const useUserStore = defineStore('user', {
         return this.loginUser
       }
 
+      // TODO: 假登录模式：本地已有数据时直接跳过网络请求，后续删除此分支
+      if (this.loginUser) {
+        this.sessionChecked = true
+        return this.loginUser
+      }
+
       try {
         const res = await getLoginUser()
         if (res.code === 0 && res.data) {

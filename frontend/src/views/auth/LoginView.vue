@@ -243,10 +243,14 @@ function applyLoginUser(loginUser) {
   navigateByRole(loginUser.role)
 }
 
-async function quickLogin(role) {
-  loginForm.value.username = role === 'TEACHER' ? 'admin' : '23201321'
-  loginForm.value.password = '123456'
-  await handleLogin()
+// TODO: 假登录入口，后续删除
+function quickLogin(role) {
+  const mockUser =
+    role === 'TEACHER'
+      ? { id: 1, username: 'admin', realName: '张老师', role: 'TEACHER' }
+      : { id: 2, username: '23201321', realName: '李同学', role: 'STUDENT', studentNo: '23201321' }
+  userStore.login(mockUser)
+  navigateByRole(role)
 }
 
 function extractMessage(res, fallback) {

@@ -484,6 +484,10 @@ function handleLogout() {
 
 .teacher-shell__content {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
   padding: 28px;
+  display: flex;
+  flex-direction: column;
 }
 </style>
