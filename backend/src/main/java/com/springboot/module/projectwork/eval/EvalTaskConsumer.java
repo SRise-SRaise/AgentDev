@@ -14,6 +14,7 @@ import com.springboot.model.entity.projectwork.ProjectAssignment;
 import com.springboot.model.entity.projectwork.ProjectScore;
 import com.springboot.model.entity.projectwork.ProjectSubmission;
 import com.springboot.module.projectwork.eval.DockerRunnerService.ContainerContext;
+import com.springboot.module.projectwork.eval.DockerRunnerService.FullstackContext;
 import com.springboot.module.projectwork.eval.EvalReportParser.ParsedReport;
 import com.springboot.module.projectwork.eval.PlaywrightService.ScreenshotResult;
 import com.springboot.mq.EvalTaskMessage;
@@ -59,6 +60,7 @@ public class EvalTaskConsumer {
     private final PlaywrightService playwrightService;
     private final PromptBuilder promptBuilder;
     private final EvalReportParser reportParser;
+    private final ProjectworkEvalProperties props;
 
     private final AgentEvalTaskMapper agentEvalTaskMapper;
     private final AgentEvalReportMapper agentEvalReportMapper;
@@ -84,7 +86,7 @@ public class EvalTaskConsumer {
         Long taskId = message.getAgentTaskId();
         log.info("[EvalConsumer] Start task taskId={}, submissionId={}", taskId, message.getSubmissionId());
 
-        ContainerContext containerCtx = null;
+        FullstackContext fullstackCtx = null;
         try {
             updateTaskStatus(taskId, "RUNNING", null);
             updateSteps(taskId, "Initializing", "RUNNING");
@@ -95,31 +97,49 @@ public class EvalTaskConsumer {
             String fileTree = promptBuilder.buildFileTree(projectDir);
             updateSteps(taskId, "Unzip", "SUCCESS");
 
-            // Step 2-3: Start container + wait for ready
-            log.info("[EvalConsumer][Step2] Start Docker container");
-            containerCtx = dockerRunnerService.startContainer(projectDir);
-            updateSteps(taskId, "Start Container", "RUNNING");
+            // Step 2: Start backend container (FULLSTACK only)
+            log.info("[EvalConsumer][Step2] Start containers");
+            updateSteps(taskId, "Start Backend", "RUNNING");
+            fullstackCtx = dockerRunnerService.startContainers(projectDir);
 
-            log.info("[EvalConsumer][Step3] Wait for port ready");
-            dockerRunnerService.waitForReady(containerCtx);
-            updateSteps(taskId, "Start Container", "SUCCESS");
+            if (fullstackCtx.getBackendCtx() != null) {
+                log.info("[EvalConsumer][Step2a] Wait for backend ready");
+                dockerRunnerService.waitForReady(
+                        fullstackCtx.getBackendCtx(), props.getBackendStartupTimeout());
+                updateSteps(taskId, "Start Backend", "SUCCESS");
+            } else {
+                updateSteps(taskId, "Start Backend", "SKIPPED");
+            }
 
-            String rawLog = dockerRunnerService.getLog(containerCtx.getContainerId());
+            // Step 3: Start frontend container + wait ready
+            log.info("[EvalConsumer][Step3] Wait for frontend ready");
+            updateSteps(taskId, "Start Frontend", "RUNNING");
+            dockerRunnerService.waitForReady(fullstackCtx.getFrontendCtx());
+            updateSteps(taskId, "Start Frontend", "SUCCESS");
 
-            // Step 4: Playwright screenshot
+            // Collect logs from both containers
+            String frontendLog = dockerRunnerService.getLog(fullstackCtx.getFrontendCtx().getContainerId());
+            String backendLog  = fullstackCtx.getBackendCtx() != null
+                    ? dockerRunnerService.getLog(fullstackCtx.getBackendCtx().getContainerId())
+                    : "";
+
+            // Step 4: Playwright screenshot (hits frontend; frontend calls backend inside Docker network)
             log.info("[EvalConsumer][Step4] Playwright screenshot");
             updateSteps(taskId, "Screenshot", "RUNNING");
-            String containerBaseUrl = "http://localhost:" + containerCtx.getHostPort();
-            ScreenshotResult screenshot = playwrightService.capture(containerBaseUrl, taskId);
+            String frontendUrl = "http://localhost:" + fullstackCtx.getFrontendCtx().getHostPort();
+            String backendUrl  = fullstackCtx.getBackendCtx() != null
+                    ? "http://localhost:" + fullstackCtx.getBackendCtx().getHostPort()
+                    : null;
+            ScreenshotResult screenshot = playwrightService.capture(frontendUrl, backendUrl, taskId);
             updateSteps(taskId, "Screenshot", "SUCCESS");
 
-            // Step 5: Log summary (fastModel)
-            log.info("[EvalConsumer][Step5] Log summary (GLM-4-Flash)");
-            String logSummaryPrompt = promptBuilder.buildLogSummaryPrompt(rawLog);
+            // Step 5: Log summary (fastModel) — combines frontend + backend logs
+            log.info("[EvalConsumer][Step5] Log summary");
+            String logSummaryPrompt = promptBuilder.buildLogSummaryPrompt(frontendLog, backendLog);
             String logSummary = callLlm(fastChatModel, null, logSummaryPrompt);
 
             // Step 6: Main evaluation (smartModel)
-            log.info("[EvalConsumer][Step6] Evaluation (GLM-4-Plus)");
+            log.info("[EvalConsumer][Step6] AI Evaluation");
             updateSteps(taskId, "AI Evaluation", "RUNNING");
             ProjectAssignment assignment = assignmentMapper.selectById(message.getAssignmentId());
             String evalPrompt = promptBuilder.buildEvalPrompt(
@@ -130,7 +150,8 @@ public class EvalTaskConsumer {
             log.info("[EvalConsumer][Step7] Persist report");
             ParsedReport parsed = reportParser.parse(llmResponse);
 
-            saveRunLog(message.getSubmissionId(), rawLog, "EVALUATED");
+            String combinedLog = "[FRONTEND]\n" + frontendLog + "\n[BACKEND]\n" + backendLog;
+            saveRunLog(message.getSubmissionId(), combinedLog, "EVALUATED");
             saveEvalReport(taskId, message.getSubmissionId(), assignment.getTitle(), parsed);
             saveProjectScore(message.getSubmissionId(), message.getAssignmentId(), parsed.getAgentScore());
 
@@ -148,8 +169,8 @@ public class EvalTaskConsumer {
                 channel.basicNack(deliveryTag, false, false);
             } catch (Exception ignored) {}
         } finally {
-            if (containerCtx != null) {
-                dockerRunnerService.cleanup(containerCtx);
+            if (fullstackCtx != null) {
+                dockerRunnerService.cleanup(fullstackCtx);
             }
         }
     }

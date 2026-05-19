@@ -28,19 +28,27 @@ import java.util.Enumeration;
 import java.util.UUID;
 
 /**
- * Handles: unzip ZIP -> create Docker container (mount code dir) -> run npm install && npm run dev
- * -> wait for port ready -> return accessible URL.
+ * Manages Docker containers for project evaluation.
+ *
+ * FULLSTACK mode (default):
+ *   ZIP must contain:
+ *     frontend/  — Vue/React project, started with npm run dev
+ *     backend/   — Python project, started with uvicorn/flask
+ *   Two containers are created on a shared Docker network so that
+ *   the frontend can reach the backend via http://backend:8000.
+ *
+ * FRONTEND_ONLY mode:
+ *   Original behaviour — single node:18-alpine container.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DockerRunnerService {
 
-    private static final String NODE_IMAGE = "node:18-alpine";
-    private static final int CONTAINER_PORT = 5173;
-
     private final DockerManager dockerManager;
     private final ProjectworkEvalProperties props;
+
+    // ---- Unzip ----------------------------------------------------------------
 
     public Path unzipProject(String zipFilePath) throws IOException {
         Path unzipRoot = Paths.get(props.getUnzipRoot());
@@ -72,40 +80,105 @@ public class DockerRunnerService {
         return destDir;
     }
 
-    public ContainerContext startContainer(Path projectDir) throws Exception {
-        int hostPort = findFreePort();
+    // ---- Container start ------------------------------------------------------
 
-        ExposedPort exposedPort = ExposedPort.tcp(CONTAINER_PORT);
+    /**
+     * Starts container(s) based on projectType.
+     * Returns a FullstackContext that holds both backend and frontend ContainerContexts
+     * (backendCtx is null in FRONTEND_ONLY mode).
+     */
+    public FullstackContext startContainers(Path projectDir) throws Exception {
+        boolean isFullstack = "FULLSTACK".equalsIgnoreCase(props.getProjectType());
+
+        if (isFullstack) {
+            Path frontendDir = projectDir.resolve("frontend");
+            Path backendDir  = projectDir.resolve("backend");
+
+            if (!Files.isDirectory(frontendDir) || !Files.isDirectory(backendDir)) {
+                log.warn("[DockerRunner] FULLSTACK mode but frontend/ or backend/ not found, "
+                        + "falling back to FRONTEND_ONLY");
+                return new FullstackContext(null, startFrontendContainer(projectDir, null));
+            }
+
+            // Create a shared network so frontend container can reach backend by hostname
+            String networkId = ensureNetwork(props.getSharedNetworkName());
+
+            ContainerContext backendCtx  = startBackendContainer(backendDir, networkId);
+            ContainerContext frontendCtx = startFrontendContainer(frontendDir, networkId);
+            return new FullstackContext(backendCtx, frontendCtx);
+        } else {
+            return new FullstackContext(null, startFrontendContainer(projectDir, null));
+        }
+    }
+
+    private ContainerContext startBackendContainer(Path backendDir, String networkId) throws Exception {
+        int hostPort = findFreePort();
+        int containerPort = props.getBackendPort();
+
+        ExposedPort exposed = ExposedPort.tcp(containerPort);
         Ports portBindings = new Ports();
-        portBindings.bind(exposedPort, Ports.Binding.bindPort(hostPort));
+        portBindings.bind(exposed, Ports.Binding.bindPort(hostPort));
 
         HostConfig hostConfig = HostConfig.newHostConfig()
-                .withBinds(new Bind(projectDir.toAbsolutePath().toString(), new Volume("/app")))
+                .withBinds(new Bind(backendDir.toAbsolutePath().toString(), new Volume("/app")))
                 .withPortBindings(portBindings)
                 .withMemory(props.getContainerMemoryLimit())
                 .withCpuPeriod(100000L)
                 .withCpuQuota(50000L)
-                .withNetworkMode("bridge");
+                .withNetworkMode(networkId != null ? props.getSharedNetworkName() : "bridge");
 
         DockerClient client = dockerManager.getClient();
-        CreateContainerResponse container = client.createContainerCmd(NODE_IMAGE)
+        CreateContainerResponse container = client.createContainerCmd(props.getBackendImage())
+                .withName("eval_backend_" + hostPort)
+                .withHostname("backend")   // frontend reaches it via http://backend:8000
                 .withWorkingDir("/app")
-                .withCmd("sh", "-c",
-                        "npm install && npm run dev -- --host 0.0.0.0 --port " + CONTAINER_PORT)
-                .withExposedPorts(exposedPort)
+                .withCmd("sh", "-c", props.getBackendStartCmd())
+                .withExposedPorts(exposed)
                 .withHostConfig(hostConfig)
                 .exec();
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
-        log.info("[DockerRunner] Container started: {} -> host port: {}", containerId, hostPort);
-
-        return new ContainerContext(containerId, hostPort, projectDir);
+        log.info("[DockerRunner] Backend container started: {} -> host port: {}", containerId, hostPort);
+        return new ContainerContext(containerId, hostPort, backendDir, "backend");
     }
 
-    public void waitForReady(ContainerContext ctx) throws Exception {
+    private ContainerContext startFrontendContainer(Path frontendDir, String networkId) throws Exception {
+        int hostPort = findFreePort();
+        int containerPort = props.getFrontendPort();
+
+        ExposedPort exposed = ExposedPort.tcp(containerPort);
+        Ports portBindings = new Ports();
+        portBindings.bind(exposed, Ports.Binding.bindPort(hostPort));
+
+        HostConfig hostConfig = HostConfig.newHostConfig()
+                .withBinds(new Bind(frontendDir.toAbsolutePath().toString(), new Volume("/app")))
+                .withPortBindings(portBindings)
+                .withMemory(props.getContainerMemoryLimit())
+                .withCpuPeriod(100000L)
+                .withCpuQuota(50000L)
+                .withNetworkMode(networkId != null ? props.getSharedNetworkName() : "bridge");
+
+        DockerClient client = dockerManager.getClient();
+        CreateContainerResponse container = client.createContainerCmd(props.getFrontendImage())
+                .withName("eval_frontend_" + hostPort)
+                .withWorkingDir("/app")
+                .withCmd("sh", "-c", props.getFrontendStartCmd())
+                .withExposedPorts(exposed)
+                .withHostConfig(hostConfig)
+                .exec();
+
+        String containerId = container.getId();
+        dockerManager.startContainer(containerId);
+        log.info("[DockerRunner] Frontend container started: {} -> host port: {}", containerId, hostPort);
+        return new ContainerContext(containerId, hostPort, frontendDir, "frontend");
+    }
+
+    // ---- Wait for ready -------------------------------------------------------
+
+    public void waitForReady(ContainerContext ctx, int timeoutSeconds) throws Exception {
         String url = "http://localhost:" + ctx.getHostPort();
-        long deadline = System.currentTimeMillis() + props.getContainerStartupTimeout() * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
 
         while (System.currentTimeMillis() < deadline) {
             try {
@@ -122,31 +195,71 @@ public class DockerRunnerService {
             }
             Thread.sleep(3000);
         }
-        throw new RuntimeException("Container startup timeout ("
-                + props.getContainerStartupTimeout() + "s), url: " + url);
+        throw new RuntimeException("Container startup timeout (" + timeoutSeconds + "s), url: " + url);
     }
+
+    /** Convenience overload using frontend timeout from properties */
+    public void waitForReady(ContainerContext ctx) throws Exception {
+        waitForReady(ctx, props.getContainerStartupTimeout());
+    }
+
+    // ---- Logs -----------------------------------------------------------------
 
     public String getLog(String containerId) throws InterruptedException {
         return dockerManager.getContainerLog(containerId, 10);
     }
 
-    public void cleanup(ContainerContext ctx) {
-        try {
-            dockerManager.stopContainer(ctx.getContainerId(), 5);
-        } catch (Exception e) {
-            log.warn("[DockerRunner] Stop container failed (ignored): {}", e.getMessage());
+    // ---- Cleanup --------------------------------------------------------------
+
+    public void cleanup(FullstackContext ctx) {
+        if (ctx.getBackendCtx() != null) {
+            cleanupContainer(ctx.getBackendCtx());
         }
-        try {
-            dockerManager.removeContainer(ctx.getContainerId());
-        } catch (Exception e) {
-            log.warn("[DockerRunner] Remove container failed (ignored): {}", e.getMessage());
+        cleanupContainer(ctx.getFrontendCtx());
+        // Remove project dir (parent of frontend/ backend/)
+        Path projectDir = ctx.getFrontendCtx().getProjectDir().getParent();
+        if (projectDir != null) {
+            deleteDirectory(projectDir.toFile());
+        } else {
+            deleteDirectory(ctx.getFrontendCtx().getProjectDir().toFile());
         }
+        // Remove shared network (best effort)
         try {
-            deleteDirectory(ctx.getProjectDir().toFile());
+            dockerManager.getClient().removeNetworkCmd(props.getSharedNetworkName()).exec();
+        } catch (Exception ignored) {}
+    }
+
+    private void cleanupContainer(ContainerContext ctx) {
+        try { dockerManager.stopContainer(ctx.getContainerId(), 5); }
+        catch (Exception e) { log.warn("[DockerRunner] Stop {} failed: {}", ctx.getRole(), e.getMessage()); }
+        try { dockerManager.removeContainer(ctx.getContainerId()); }
+        catch (Exception e) { log.warn("[DockerRunner] Remove {} failed: {}", ctx.getRole(), e.getMessage()); }
+    }
+
+    // ---- Docker network -------------------------------------------------------
+
+    private String ensureNetwork(String networkName) {
+        try {
+            DockerClient client = dockerManager.getClient();
+            // Try to inspect; if not found, create it
+            try {
+                client.inspectNetworkCmd().withNetworkId(networkName).exec();
+                log.debug("[DockerRunner] Network '{}' already exists", networkName);
+            } catch (Exception notFound) {
+                client.createNetworkCmd()
+                        .withName(networkName)
+                        .withDriver("bridge")
+                        .exec();
+                log.info("[DockerRunner] Created Docker network '{}'", networkName);
+            }
+            return networkName;
         } catch (Exception e) {
-            log.warn("[DockerRunner] Cleanup dir failed (ignored): {}", e.getMessage());
+            log.warn("[DockerRunner] Could not ensure network '{}': {}", networkName, e.getMessage());
+            return null;
         }
     }
+
+    // ---- Utilities ------------------------------------------------------------
 
     private int findFreePort() throws IOException {
         try (java.net.ServerSocket s = new java.net.ServerSocket(0)) {
@@ -166,11 +279,26 @@ public class DockerRunnerService {
         dir.delete();
     }
 
+    // ---- Context classes ------------------------------------------------------
+
     @lombok.Data
     @lombok.AllArgsConstructor
     public static class ContainerContext {
         private String containerId;
         private int hostPort;
         private Path projectDir;
+        /** "frontend" or "backend" — used for logging */
+        private String role;
+    }
+
+    /**
+     * Holds both backend and frontend ContainerContexts.
+     * backendCtx is null in FRONTEND_ONLY mode.
+     */
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    public static class FullstackContext {
+        private ContainerContext backendCtx;
+        private ContainerContext frontendCtx;
     }
 }

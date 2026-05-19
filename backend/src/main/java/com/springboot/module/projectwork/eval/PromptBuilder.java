@@ -17,8 +17,9 @@ import java.util.stream.Stream;
 public class PromptBuilder {
 
     public static final String SYSTEM_PROMPT =
-            "You are a professional teaching assistant for a Web Frontend course. "
-            + "Your job is to objectively evaluate student projects according to the given rubric. "
+            "You are a professional teaching assistant for a full-stack Web development course. "
+            + "Your job is to objectively evaluate student full-stack projects (Vue frontend + Python backend) "
+            + "according to the given rubric. "
             + "Score each dimension independently with specific deduction reasons. "
             + "Return ONLY a JSON object - no markdown fences, no extra text.";
 
@@ -34,16 +35,32 @@ public class PromptBuilder {
             + "  \"agent_score\": 85\n"
             + "}";
 
+    /**
+     * Builds a log-summary prompt for a full-stack project.
+     * Both frontend (Node.js) and backend (Python) logs are included.
+     * backendLog may be empty/null for FRONTEND_ONLY submissions.
+     */
+    public String buildLogSummaryPrompt(String frontendLog, String backendLog) {
+        return "Summarize the following project run logs in no more than 300 characters total. "
+                + "Focus on errors, warnings, startup status, and whether the backend API started successfully.\n\n"
+                + "[FRONTEND LOG (last 100 lines)]\n" + trimLog(frontendLog, 100) + "\n\n"
+                + "[BACKEND LOG (last 100 lines)]\n" + trimLog(backendLog, 100);
+    }
+
+    /** Backwards-compatible overload for FRONTEND_ONLY callers */
     public String buildLogSummaryPrompt(String rawLog) {
-        String[] lines = rawLog.split("\n");
-        int start = Math.max(0, lines.length - 200);
+        return buildLogSummaryPrompt(rawLog, "");
+    }
+
+    private String trimLog(String log, int maxLines) {
+        if (log == null || log.isBlank()) return "(none)";
+        String[] lines = log.split("\n");
+        int start = Math.max(0, lines.length - maxLines);
         StringBuilder sb = new StringBuilder();
         for (int i = start; i < lines.length; i++) {
             sb.append(lines[i]).append("\n");
         }
-        return "Summarize the following Node.js project run log in no more than 200 characters. "
-                + "Focus on errors, warnings and startup status.\n\n"
-                + "[LOG]\n" + sb;
+        return sb.toString();
     }
 
     public String buildEvalPrompt(
@@ -55,19 +72,43 @@ public class PromptBuilder {
         return "[Assignment Title]\n" + assignment.getTitle() + "\n\n"
                 + "[Requirements]\n" + nvl(assignment.getRequirement()) + "\n\n"
                 + "[Rubric (total 100 pts)]\n" + nvl(assignment.getRubricJson()) + "\n\n"
-                + "[File Structure (src/ 2 levels)]\n" + nvl(fileTree) + "\n\n"
-                + "[Run Log Summary]\n" + nvl(logSummary) + "\n\n"
-                + "[Page Snapshot]\n" + nvl(pageTextSummary) + "\n\n"
+                + "[Project File Structure (frontend/ + backend/, 2 levels)]\n" + nvl(fileTree) + "\n\n"
+                + "[Run Log Summary (frontend + backend)]\n" + nvl(logSummary) + "\n\n"
+                + "[Page Snapshot + Backend API Probe]\n" + nvl(pageTextSummary) + "\n\n"
                 + "[Response Format (strict JSON, no markdown)]\n" + RESPONSE_FORMAT;
     }
 
+    /**
+     * Builds a file-tree string for the AI prompt.
+     *
+     * For FULLSTACK projects the ZIP contains frontend/ and backend/ subdirectories.
+     * We scan each up to 2 levels deep and label them separately so the AI can see
+     * the structure of both layers.  Falls back to a single-root scan when neither
+     * subdirectory exists (FRONTEND_ONLY / legacy submissions).
+     */
     public String buildFileTree(Path projectDir) {
         StringBuilder sb = new StringBuilder();
-        Path srcDir = projectDir.resolve("src");
-        if (!Files.exists(srcDir)) {
-            srcDir = projectDir;
+        Path frontendDir = projectDir.resolve("frontend");
+        Path backendDir  = projectDir.resolve("backend");
+
+        boolean hasFrontend = Files.isDirectory(frontendDir);
+        boolean hasBackend  = Files.isDirectory(backendDir);
+
+        if (hasFrontend || hasBackend) {
+            if (hasFrontend) {
+                sb.append("[frontend/]\n");
+                buildTreeRecursive(frontendDir, sb, 1, 2);
+            }
+            if (hasBackend) {
+                sb.append("[backend/]\n");
+                buildTreeRecursive(backendDir, sb, 1, 2);
+            }
+        } else {
+            // Fallback: legacy single-root or frontend-only ZIP
+            Path srcDir = projectDir.resolve("src");
+            if (!Files.exists(srcDir)) srcDir = projectDir;
+            buildTreeRecursive(srcDir, sb, 0, 2);
         }
-        buildTreeRecursive(srcDir, sb, 0, 2);
         return sb.toString();
     }
 
