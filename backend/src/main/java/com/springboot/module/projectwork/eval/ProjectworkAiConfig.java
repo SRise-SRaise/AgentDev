@@ -29,21 +29,33 @@ public class ProjectworkAiConfig {
 
     @Bean("pwFastChatModel")
     public ChatModel pwFastChatModel() {
-        OpenAiApi api = new OpenAiApi(baseUrl, apiKey);
+        OpenAiApi api = OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(fastModel)
                 .temperature(0.3)
                 .build();
-        return new OpenAiChatModel(api, options);
+        return OpenAiChatModel.builder()
+                .openAiApi(api)
+                .defaultOptions(options)
+                .build();
     }
 
     @Bean("pwSmartChatModel")
     public ChatModel pwSmartChatModel() {
-        OpenAiApi api = new OpenAiApi(baseUrl, apiKey);
+        OpenAiApi api = OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(smartModel)
                 .temperature(0.3)
                 .build();
-        return new OpenAiChatModel(api, options);
+        return OpenAiChatModel.builder()
+                .openAiApi(api)
+                .defaultOptions(options)
+                .build();
     }
 }

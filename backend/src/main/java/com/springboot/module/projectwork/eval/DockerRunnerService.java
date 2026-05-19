@@ -3,8 +3,10 @@ package com.springboot.module.projectwork.eval;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.NetworkingConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import com.github.dockerjava.api.model.Volume;
@@ -176,7 +178,7 @@ public class DockerRunnerService {
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(image)
                 .withName("eval_db_" + hostPort)
-                .withHostname("db")              // backend reaches it via DB_HOST=db
+                .withNetworkingConfig(buildNetworkingConfig(networkName, "db"))
                 .withExposedPorts(exposed)
                 .withEnv(envVars)
                 .withHostConfig(hostConfig)
@@ -314,7 +316,7 @@ public class DockerRunnerService {
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(props.getBackendImage())
                 .withName("eval_backend_" + hostPort)
-                .withHostname("backend")
+                .withNetworkingConfig(buildNetworkingConfig(networkName, "backend"))
                 .withWorkingDir("/app")
                 .withCmd("sh", "-c", props.getBackendStartCmd())
                 .withEnv(extraEnv)
@@ -360,6 +362,23 @@ public class DockerRunnerService {
         log.info("[DockerRunner] Frontend container started: {} hostPort={} network={}",
                 containerId, hostPort, networkName);
         return new ContainerContext(containerId, hostPort, frontendDir, "frontend");
+    }
+
+    // ---- Networking helper ----------------------------------------------------
+
+    /**
+     * Builds a NetworkingConfig that registers the container under the given
+     * network alias so other containers on the same bridge can resolve it by
+     * the alias name (e.g. "db", "backend").
+     * This replaces the deprecated .withHostname() on CreateContainerCmd.
+     */
+    private NetworkingConfig buildNetworkingConfig(String networkName, String alias) {
+        ContainerNetwork containerNetwork = new ContainerNetwork()
+                .withAliases(List.of(alias));
+        NetworkingConfig networkingConfig = new NetworkingConfig();
+        networkingConfig.setEndpointsConfig(
+                java.util.Map.of(networkName, containerNetwork));
+        return networkingConfig;
     }
 
     // ---- Wait for ready (HTTP) ------------------------------------------------

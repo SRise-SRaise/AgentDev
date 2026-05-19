@@ -20,7 +20,10 @@ public class AiModelConfig {
     public OpenAiApi openAiApi(
             @Value("${spring.ai.openai.base-url}") String baseUrl,
             @Value("${spring.ai.openai.api-key}") String apiKey) {
-        return new OpenAiApi(baseUrl, apiKey);
+        return OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
     }
 
     @Bean
@@ -31,7 +34,10 @@ public class AiModelConfig {
                 .model(config.getModel())
                 .temperature(config.getTemperature() != null ? config.getTemperature() : 0.7)
                 .build();
-        return new OpenAiChatModel(openAiApi, options);
+        return OpenAiChatModel.builder()
+                .openAiApi(openAiApi)
+                .defaultOptions(options)
+                .build();
     }
 
     @Bean
@@ -42,7 +48,10 @@ public class AiModelConfig {
                 .model(config.getModel())
                 .temperature(config.getTemperature() != null ? config.getTemperature() : 0.5)
                 .build();
-        return new OpenAiChatModel(openAiApi, options);
+        return OpenAiChatModel.builder()
+                .openAiApi(openAiApi)
+                .defaultOptions(options)
+                .build();
     }
 
     @Bean
