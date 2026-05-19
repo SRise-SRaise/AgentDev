@@ -190,7 +190,7 @@
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-subtle)" stroke-width="1.2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              <p>尚未触发评测���点击「触发评测」开始</p>
+              <p>尚未触发评测，点击「触发评测」开始</p>
             </div>
             <div v-else class="steps-track">
               <div
@@ -341,7 +341,7 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                保存���核
+                保存复核
               </button>
               <span v-if="selectedDetail._reviewSaved" class="save-hint">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -615,8 +615,9 @@ const previewShot = ref(null)
   display: flex;
   flex-direction: column;
   gap: 20px;
-  height: calc(100vh - 56px - 56px);
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* 顶部操作栏 */
