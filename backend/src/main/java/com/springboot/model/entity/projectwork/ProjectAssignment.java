@@ -23,7 +23,7 @@ public class ProjectAssignment {
 
     private String requirement;
 
-    /** JSON 字符串，评分维度配置 */
+    /** JSON string with scoring dimension config */
     private String rubricJson;
 
     private BigDecimal fullScore;

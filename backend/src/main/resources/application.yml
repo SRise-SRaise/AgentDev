@@ -87,7 +87,7 @@ ai:
     embedding:
       model: embedding-2
 
-# 大作业 Agent 专用 AI 配置（独立于全局 spring.ai，避免影响其他模块）
+# Projectwork Agent AI config (isolated from global spring.ai)
 projectwork:
   ai:
     base-url: https://open.bigmodel.cn/api/paas/v4
@@ -95,17 +95,11 @@ projectwork:
     fast-model: glm-4-flash
     smart-model: glm-4-plus
   eval:
-    # 容器启动等待超时（秒）
     container-startup-timeout: 120
-    # 整体评测任务超时（秒）
     task-timeout: 180
-    # 截图等待时间（毫秒）
     screenshot-wait-ms: 3000
-    # 容器运行内存上限（字节，512MB）
     container-memory-limit: 536870912
-    # 解压目录根路径
     unzip-root: ${app.storage.root-path}/project_unzip
-    # 截图存储根路径
     screenshot-root: ${app.storage.root-path}/screenshots
 
 docker:

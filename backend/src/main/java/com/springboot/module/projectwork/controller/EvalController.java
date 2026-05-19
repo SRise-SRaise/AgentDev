@@ -16,10 +16,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 大作业 Agent 评测接口
+ * Projectwork Agent evaluation endpoints.
  *
- * POST /api/eval/trigger?submissionId=xxx   触发评测，立即返回 taskId
- * GET  /api/eval/status/{taskId}            查询评测进度（前端轮询）
+ * POST /api/eval/trigger?submissionId=xxx  - trigger evaluation, returns taskId immediately
+ * GET  /api/eval/status/{taskId}           - poll evaluation progress
  */
 @Slf4j
 @RestController
@@ -29,29 +29,19 @@ public class EvalController {
     @Resource
     private EvalTaskService evalTaskService;
 
-    /**
-     * 触发 Agent 评测
-     * @param submissionId 大作业提交 ID
-     * @return agent_eval_task.id（任务 ID，用于轮询状态）
-     */
     @PostMapping("/trigger")
     public BaseResponse<Long> triggerEval(@RequestParam Long submissionId) {
         if (submissionId == null || submissionId <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "submissionId 不合法");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Invalid submissionId");
         }
         Long taskId = evalTaskService.triggerEval(submissionId);
         return ResultUtils.success(taskId);
     }
 
-    /**
-     * 查询评测任务状态（前端轮询接口）
-     * task_status: PENDING / RUNNING / SUCCESS / FAILED
-     * output_json.steps: 步骤进度列表
-     */
     @GetMapping("/status/{taskId}")
     public BaseResponse<AgentEvalTask> getTaskStatus(@PathVariable Long taskId) {
         if (taskId == null || taskId <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "taskId 不合法");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Invalid taskId");
         }
         AgentEvalTask task = evalTaskService.getTaskStatus(taskId);
         return ResultUtils.success(task);

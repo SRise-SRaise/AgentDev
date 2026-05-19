@@ -17,7 +17,7 @@ public class AgentEvalTask {
     /** PROJECT / VUE / PYTHON */
     private String taskType;
 
-    /** 关联的 project_submission.id */
+    /** FK to project_submission.id */
     private Long relatedId;
 
     private String agentName;
@@ -27,10 +27,8 @@ public class AgentEvalTask {
 
     private String prompt;
 
-    /** JSON 字符串，存步骤进度、run_log 等 */
     private String inputJson;
 
-    /** JSON 字符串，存 LLM 原始返回 */
     private String outputJson;
 
     private String errorMessage;

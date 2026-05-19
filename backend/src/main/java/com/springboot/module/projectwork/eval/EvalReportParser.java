@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 
 /**
- * 解析 GLM 返回的 JSON 字符串，提取各字段写入 AgentEvalReport。
+ * Parses the JSON string returned by GLM and maps it to AgentEvalReport fields.
  */
 @Slf4j
 @Component
@@ -18,9 +18,6 @@ public class EvalReportParser {
 
     private final ObjectMapper objectMapper;
 
-    /**
-     * 从 LLM 原始返回文本中解析结构化结果
-     */
     public ParsedReport parse(String llmResponse) {
         String json = extractJson(llmResponse);
         try {
@@ -38,22 +35,20 @@ public class EvalReportParser {
                         .min(BigDecimal.valueOf(100))
                         .max(BigDecimal.ZERO));
             } else {
-                // 尝试从 dimensions 汇总
                 report.setAgentScore(sumDimensions(root));
             }
             return report;
         } catch (Exception e) {
-            log.error("[EvalReportParser] JSON 解析失败，原始内容: {}", llmResponse, e);
-            // 降级：返回原始文本
+            log.error("[EvalReportParser] JSON parse failed, raw: {}", llmResponse, e);
             ParsedReport fallback = new ParsedReport();
-            fallback.setSummary("AI 返回格式异常，原始内容：" + llmResponse.substring(0, Math.min(200, llmResponse.length())));
+            fallback.setSummary("AI response format error: "
+                    + llmResponse.substring(0, Math.min(200, llmResponse.length())));
             fallback.setRawJson(llmResponse);
             fallback.setAgentScore(BigDecimal.ZERO);
             return fallback;
         }
     }
 
-    /** 尝试清理 LLM 可能返回的 markdown 代码块标记 */
     private String extractJson(String raw) {
         if (raw == null) return "{}";
         raw = raw.trim();
@@ -64,7 +59,6 @@ public class EvalReportParser {
                 raw = raw.substring(firstNewline + 1, lastBacktick).trim();
             }
         }
-        // 找第一个 { 和最后一个 } 之间的内容
         int start = raw.indexOf('{');
         int end = raw.lastIndexOf('}');
         if (start >= 0 && end > start) {
@@ -96,7 +90,6 @@ public class EvalReportParser {
         private String problem;
         private String suggestion;
         private BigDecimal agentScore;
-        /** LLM 返回的完整 JSON 字符串 */
         private String rawJson;
     }
 }

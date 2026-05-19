@@ -7,10 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
-/**
- * 大作业 Agent 评测消息体
- * 发布到 eval.task.queue，由 EvalTaskConsumer 消费
- */
+/** Message body published to eval.task.queue and consumed by EvalTaskConsumer */
 @Data
 @Builder
 @NoArgsConstructor
@@ -26,9 +23,9 @@ public class EvalTaskMessage implements Serializable {
     /** project_assignment.id */
     private Long assignmentId;
 
-    /** ZIP 文件在本地 storage 的绝对路径 */
+    /** Absolute path of the ZIP file on local storage */
     private String zipFilePath;
 
-    /** 整体评测超时秒数（默认 180s） */
+    /** Overall evaluation timeout in seconds */
     private int timeoutSeconds;
 }

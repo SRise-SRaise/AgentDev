@@ -31,7 +31,7 @@ public class AgentEvalReport {
 
     private BigDecimal agentScore;
 
-    /** 结构化 JSON，包含各维度得分 */
+    /** Structured JSON with dimension scores */
     private String reportJson;
 
     private Long reportFileId;

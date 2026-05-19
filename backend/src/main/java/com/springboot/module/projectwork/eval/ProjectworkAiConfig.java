@@ -9,8 +9,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 大作业评测专用 AI 配置，独立于全局 spring.ai 配置，
- * 使用 projectwork.ai.* 下的独立 key 和模型，不影响其他模块。
+ * Isolated AI config for projectwork evaluation.
+ * Uses projectwork.ai.* properties, independent of the global spring.ai config.
  */
 @Configuration
 public class ProjectworkAiConfig {
