@@ -37,19 +37,30 @@ public class PromptBuilder {
 
     /**
      * Builds a log-summary prompt for a full-stack project.
-     * Both frontend (Node.js) and backend (Python) logs are included.
-     * backendLog may be empty/null for FRONTEND_ONLY submissions.
+     * All three log sources are optional (null / blank = "(none)").
+     * dbLog is typically the PostgreSQL/MySQL startup output.
      */
-    public String buildLogSummaryPrompt(String frontendLog, String backendLog) {
-        return "Summarize the following project run logs in no more than 300 characters total. "
-                + "Focus on errors, warnings, startup status, and whether the backend API started successfully.\n\n"
-                + "[FRONTEND LOG (last 100 lines)]\n" + trimLog(frontendLog, 100) + "\n\n"
-                + "[BACKEND LOG (last 100 lines)]\n" + trimLog(backendLog, 100);
+    public String buildLogSummaryPrompt(String frontendLog, String backendLog, String dbLog) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Summarize the following project run logs in no more than 400 characters total. ")
+          .append("Focus on errors, warnings, startup status, DB connection results, ")
+          .append("and whether the backend API started successfully.\n\n");
+        sb.append("[FRONTEND LOG (last 100 lines)]\n").append(trimLog(frontendLog, 100)).append("\n\n");
+        sb.append("[BACKEND LOG (last 100 lines)]\n").append(trimLog(backendLog, 100));
+        if (dbLog != null && !dbLog.isBlank()) {
+            sb.append("\n\n[DB LOG (last 50 lines)]\n").append(trimLog(dbLog, 50));
+        }
+        return sb.toString();
     }
 
-    /** Backwards-compatible overload for FRONTEND_ONLY callers */
+    /** Two-arg overload for callers without a DB sidecar */
+    public String buildLogSummaryPrompt(String frontendLog, String backendLog) {
+        return buildLogSummaryPrompt(frontendLog, backendLog, "");
+    }
+
+    /** Backwards-compatible single-arg overload for FRONTEND_ONLY callers */
     public String buildLogSummaryPrompt(String rawLog) {
-        return buildLogSummaryPrompt(rawLog, "");
+        return buildLogSummaryPrompt(rawLog, "", "");
     }
 
     private String trimLog(String log, int maxLines) {
@@ -73,7 +84,7 @@ public class PromptBuilder {
                 + "[Requirements]\n" + nvl(assignment.getRequirement()) + "\n\n"
                 + "[Rubric (total 100 pts)]\n" + nvl(assignment.getRubricJson()) + "\n\n"
                 + "[Project File Structure (frontend/ + backend/, 2 levels)]\n" + nvl(fileTree) + "\n\n"
-                + "[Run Log Summary (frontend + backend)]\n" + nvl(logSummary) + "\n\n"
+                + "[Run Log Summary (frontend + backend + db)]\n" + nvl(logSummary) + "\n\n"
                 + "[Page Snapshot + Backend API Probe]\n" + nvl(pageTextSummary) + "\n\n"
                 + "[Response Format (strict JSON, no markdown)]\n" + RESPONSE_FORMAT;
     }

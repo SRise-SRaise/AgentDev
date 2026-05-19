@@ -97,13 +97,26 @@ public class EvalTaskConsumer {
             String fileTree = promptBuilder.buildFileTree(projectDir);
             updateSteps(taskId, "Unzip", "SUCCESS");
 
-            // Step 2: Start backend container (FULLSTACK only)
+            // Step 2: Detect DB + start all containers (DB -> backend -> frontend)
             log.info("[EvalConsumer][Step2] Start containers");
-            updateSteps(taskId, "Start Backend", "RUNNING");
+            updateSteps(taskId, "Start Containers", "RUNNING");
             fullstackCtx = dockerRunnerService.startContainers(projectDir);
 
+            // Step 2a: Wait for DB sidecar (if any)
+            if (fullstackCtx.getDbCtx() != null) {
+                log.info("[EvalConsumer][Step2a] Wait for DB sidecar ready");
+                updateSteps(taskId, "Start DB", "RUNNING");
+                dockerRunnerService.waitForDbReady(
+                        fullstackCtx.getDbCtx(), props.getDbStartupTimeout());
+                updateSteps(taskId, "Start DB", "SUCCESS");
+            } else {
+                updateSteps(taskId, "Start DB", "SKIPPED");
+            }
+
+            // Step 2b: Wait for backend ready
             if (fullstackCtx.getBackendCtx() != null) {
-                log.info("[EvalConsumer][Step2a] Wait for backend ready");
+                log.info("[EvalConsumer][Step2b] Wait for backend ready");
+                updateSteps(taskId, "Start Backend", "RUNNING");
                 dockerRunnerService.waitForReady(
                         fullstackCtx.getBackendCtx(), props.getBackendStartupTimeout());
                 updateSteps(taskId, "Start Backend", "SUCCESS");
@@ -117,10 +130,13 @@ public class EvalTaskConsumer {
             dockerRunnerService.waitForReady(fullstackCtx.getFrontendCtx());
             updateSteps(taskId, "Start Frontend", "SUCCESS");
 
-            // Collect logs from both containers
+            // Collect logs from all containers
             String frontendLog = dockerRunnerService.getLog(fullstackCtx.getFrontendCtx().getContainerId());
             String backendLog  = fullstackCtx.getBackendCtx() != null
                     ? dockerRunnerService.getLog(fullstackCtx.getBackendCtx().getContainerId())
+                    : "";
+            String dbLog = fullstackCtx.getDbCtx() != null
+                    ? dockerRunnerService.getLog(fullstackCtx.getDbCtx().getContainerId())
                     : "";
 
             // Step 4: Playwright screenshot (hits frontend; frontend calls backend inside Docker network)
@@ -133,9 +149,9 @@ public class EvalTaskConsumer {
             ScreenshotResult screenshot = playwrightService.capture(frontendUrl, backendUrl, taskId);
             updateSteps(taskId, "Screenshot", "SUCCESS");
 
-            // Step 5: Log summary (fastModel) — combines frontend + backend logs
+            // Step 5: Log summary (fastModel) — combines frontend + backend + db logs
             log.info("[EvalConsumer][Step5] Log summary");
-            String logSummaryPrompt = promptBuilder.buildLogSummaryPrompt(frontendLog, backendLog);
+            String logSummaryPrompt = promptBuilder.buildLogSummaryPrompt(frontendLog, backendLog, dbLog);
             String logSummary = callLlm(fastChatModel, null, logSummaryPrompt);
 
             // Step 6: Main evaluation (smartModel)
@@ -150,7 +166,9 @@ public class EvalTaskConsumer {
             log.info("[EvalConsumer][Step7] Persist report");
             ParsedReport parsed = reportParser.parse(llmResponse);
 
-            String combinedLog = "[FRONTEND]\n" + frontendLog + "\n[BACKEND]\n" + backendLog;
+            String combinedLog = "[FRONTEND]\n" + frontendLog
+                    + "\n[BACKEND]\n" + backendLog
+                    + (dbLog.isBlank() ? "" : "\n[DB]\n" + dbLog);
             saveRunLog(message.getSubmissionId(), combinedLog, "EVALUATED");
             saveEvalReport(taskId, message.getSubmissionId(), assignment.getTitle(), parsed);
             saveProjectScore(message.getSubmissionId(), message.getAssignmentId(), parsed.getAgentScore());

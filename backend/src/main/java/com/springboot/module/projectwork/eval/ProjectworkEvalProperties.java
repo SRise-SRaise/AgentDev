@@ -59,4 +59,31 @@ public class ProjectworkEvalProperties {
 
     /** Docker network name shared between frontend and backend containers */
     private String sharedNetworkName = "eval_net";
+
+    // ---- Database sidecar settings ----
+
+    /**
+     * Whether to auto-detect and start a database sidecar container.
+     * When true, DockerRunnerService will scan backend/ for DB dependencies
+     * (requirements.txt / .env.example / config.py) and start the appropriate container.
+     */
+    private boolean dbSidecarEnabled = true;
+
+    /** Seconds to wait for the DB container to accept connections before starting the backend */
+    private int dbStartupTimeout = 60;
+
+    /** Eval-internal database name injected into the backend container */
+    private String dbName = "eval_db";
+
+    /** Eval-internal database user injected into the backend container */
+    private String dbUser = "eval_user";
+
+    /** Eval-internal database password injected into the backend container */
+    private String dbPassword = "eval_pass";
+
+    /** Docker image used when a MySQL/MariaDB dependency is detected */
+    private String mysqlImage = "mysql:8.0";
+
+    /** Docker image used when a PostgreSQL dependency is detected */
+    private String postgresImage = "postgres:16-alpine";
 }

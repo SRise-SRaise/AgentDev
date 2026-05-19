@@ -24,21 +24,28 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.UUID;
 
 /**
  * Manages Docker containers for project evaluation.
  *
  * FULLSTACK mode (default):
- *   ZIP must contain:
- *     frontend/  — Vue/React project, started with npm run dev
- *     backend/   — Python project, started with uvicorn/flask
- *   Two containers are created on a shared Docker network so that
- *   the frontend can reach the backend via http://backend:8000.
+ *   ZIP structure:
+ *     frontend/  — Vue/React (node:18-alpine, npm run dev)
+ *     backend/   — Python    (python:3.11-slim, uvicorn / flask)
+ *   Optional DB sidecar: if backend/ contains psycopg2/pymysql/asyncpg etc.
+ *   a database container is auto-started on the shared network and its
+ *   credentials are injected into the backend container as env vars.
+ *
+ * All three containers share the Docker network "eval_net":
+ *   frontend → http://backend:8000
+ *   backend  → DB_HOST=db, DB_PORT=3306|5432
  *
  * FRONTEND_ONLY mode:
- *   Original behaviour — single node:18-alpine container.
+ *   Single node:18-alpine container, original behaviour.
  */
 @Slf4j
 @Service
@@ -80,38 +87,204 @@ public class DockerRunnerService {
         return destDir;
     }
 
+    // ---- DB detection ---------------------------------------------------------
+
+    /**
+     * Scans backend/ for common Python DB dependency keywords.
+     * Returns the detected DbType, or NONE if no database is required.
+     */
+    public DbType detectDatabase(Path backendDir) {
+        if (!Files.isDirectory(backendDir)) return DbType.NONE;
+
+        // Files to scan for DB hints
+        String[] filesToScan = {
+            "requirements.txt", "requirements-dev.txt", "pyproject.toml",
+            ".env.example", "config.py", "settings.py", "database.py",
+            "db.py", "models.py", "app.py", "main.py"
+        };
+
+        for (String filename : filesToScan) {
+            Path candidate = backendDir.resolve(filename);
+            if (Files.exists(candidate)) {
+                try {
+                    String content = Files.readString(candidate).toLowerCase();
+                    // PostgreSQL keywords
+                    if (content.contains("psycopg2") || content.contains("asyncpg")
+                            || content.contains("psycopg") || content.contains("postgresql")
+                            || content.contains("postgres")) {
+                        log.info("[DockerRunner] Detected PostgreSQL dependency in {}", filename);
+                        return DbType.POSTGRESQL;
+                    }
+                    // MySQL / MariaDB keywords
+                    if (content.contains("pymysql") || content.contains("mysqlclient")
+                            || content.contains("aiomysql") || content.contains("mysql+")
+                            || content.contains("mysql://")) {
+                        log.info("[DockerRunner] Detected MySQL dependency in {}", filename);
+                        return DbType.MYSQL;
+                    }
+                    // SQLite is handled by Python stdlib — no extra container needed
+                    if (content.contains("sqlite")) {
+                        log.info("[DockerRunner] Detected SQLite usage in {} — no sidecar needed", filename);
+                        return DbType.SQLITE;
+                    }
+                } catch (IOException e) {
+                    log.warn("[DockerRunner] Could not read {}: {}", candidate, e.getMessage());
+                }
+            }
+        }
+        log.info("[DockerRunner] No DB dependency detected in backend/");
+        return DbType.NONE;
+    }
+
+    // ---- DB container ---------------------------------------------------------
+
+    /**
+     * Starts a database sidecar container on the shared network.
+     * The container is given the hostname "db" so the backend can reach it
+     * via DB_HOST=db regardless of which database engine is used.
+     *
+     * Returns null if dbType is NONE or SQLITE.
+     */
+    public ContainerContext startDbContainer(DbType dbType, String networkName) throws Exception {
+        if (dbType == DbType.NONE || dbType == DbType.SQLITE) return null;
+
+        int hostPort = findFreePort();
+        boolean isPostgres = (dbType == DbType.POSTGRESQL);
+        int containerPort = isPostgres ? 5432 : 3306;
+        String image = isPostgres ? props.getPostgresImage() : props.getMysqlImage();
+
+        ExposedPort exposed = ExposedPort.tcp(containerPort);
+        Ports portBindings = new Ports();
+        portBindings.bind(exposed, Ports.Binding.bindPort(hostPort));
+
+        List<String> envVars = isPostgres
+                ? List.of(
+                    "POSTGRES_DB="       + props.getDbName(),
+                    "POSTGRES_USER="     + props.getDbUser(),
+                    "POSTGRES_PASSWORD=" + props.getDbPassword())
+                : List.of(
+                    "MYSQL_DATABASE="      + props.getDbName(),
+                    "MYSQL_USER="          + props.getDbUser(),
+                    "MYSQL_PASSWORD="      + props.getDbPassword(),
+                    "MYSQL_ROOT_PASSWORD=" + props.getDbPassword());
+
+        HostConfig hostConfig = HostConfig.newHostConfig()
+                .withPortBindings(portBindings)
+                .withMemory(256 * 1024 * 1024L)  // 256 MB — DB sidecar is lightweight
+                .withNetworkMode(networkName);
+
+        DockerClient client = dockerManager.getClient();
+        CreateContainerResponse container = client.createContainerCmd(image)
+                .withName("eval_db_" + hostPort)
+                .withHostname("db")              // backend reaches it via DB_HOST=db
+                .withExposedPorts(exposed)
+                .withEnv(envVars)
+                .withHostConfig(hostConfig)
+                .exec();
+
+        String containerId = container.getId();
+        dockerManager.startContainer(containerId);
+        log.info("[DockerRunner] DB container ({}) started: {} -> host port: {}",
+                dbType, containerId, hostPort);
+        return new ContainerContext(containerId, hostPort, null, "db");
+    }
+
+    /**
+     * Waits for the database port to accept TCP connections.
+     * Uses raw socket connect instead of HTTP since DB ports are not HTTP.
+     */
+    public void waitForDbReady(ContainerContext dbCtx, int timeoutSeconds) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            try (java.net.Socket s = new java.net.Socket()) {
+                s.connect(new java.net.InetSocketAddress("localhost", dbCtx.getHostPort()), 2000);
+                log.info("[DockerRunner] DB port {} is open", dbCtx.getHostPort());
+                // Extra grace: give the DB engine 5s to finish initialization after port opens
+                Thread.sleep(5000);
+                return;
+            } catch (Exception ignored) {
+            }
+            Thread.sleep(3000);
+        }
+        throw new RuntimeException("DB startup timeout (" + timeoutSeconds + "s) port=" + dbCtx.getHostPort());
+    }
+
+    // ---- Build backend env vars -----------------------------------------------
+
+    /**
+     * Returns the environment variable list to inject into the backend container,
+     * encoding the DB connection parameters that the backend is expected to read
+     * from os.environ (standard practice for both Flask and FastAPI projects).
+     */
+    private List<String> buildBackendEnv(DbType dbType) {
+        List<String> env = new ArrayList<>();
+        if (dbType == DbType.NONE || dbType == DbType.SQLITE) return env;
+
+        boolean isPostgres = (dbType == DbType.POSTGRESQL);
+        int dbPort = isPostgres ? 5432 : 3306;
+
+        // Standard key names used by most Python DB projects
+        env.add("DB_HOST=db");
+        env.add("DB_PORT=" + dbPort);
+        env.add("DB_NAME=" + props.getDbName());
+        env.add("DB_USER=" + props.getDbUser());
+        env.add("DB_PASSWORD=" + props.getDbPassword());
+        env.add("DB_DATABASE=" + props.getDbName());  // alias used by some frameworks
+
+        // SQLAlchemy / Tortoise-ORM style DATABASE_URL
+        String urlScheme = isPostgres ? "postgresql+psycopg2" : "mysql+pymysql";
+        String databaseUrl = String.format("%s://%s:%s@db:%d/%s",
+                urlScheme, props.getDbUser(), props.getDbPassword(), dbPort, props.getDbName());
+        env.add("DATABASE_URL=" + databaseUrl);
+
+        // Async variants
+        String asyncScheme = isPostgres ? "postgresql+asyncpg" : "mysql+aiomysql";
+        String asyncUrl = String.format("%s://%s:%s@db:%d/%s",
+                asyncScheme, props.getDbUser(), props.getDbPassword(), dbPort, props.getDbName());
+        env.add("ASYNC_DATABASE_URL=" + asyncUrl);
+
+        return env;
+    }
+
     // ---- Container start ------------------------------------------------------
 
     /**
-     * Starts container(s) based on projectType.
-     * Returns a FullstackContext that holds both backend and frontend ContainerContexts
-     * (backendCtx is null in FRONTEND_ONLY mode).
+     * Entry point: starts all required containers for this submission.
+     * Order: network -> db (if needed) -> backend -> frontend
      */
     public FullstackContext startContainers(Path projectDir) throws Exception {
         boolean isFullstack = "FULLSTACK".equalsIgnoreCase(props.getProjectType());
 
-        if (isFullstack) {
-            Path frontendDir = projectDir.resolve("frontend");
-            Path backendDir  = projectDir.resolve("backend");
-
-            if (!Files.isDirectory(frontendDir) || !Files.isDirectory(backendDir)) {
-                log.warn("[DockerRunner] FULLSTACK mode but frontend/ or backend/ not found, "
-                        + "falling back to FRONTEND_ONLY");
-                return new FullstackContext(null, startFrontendContainer(projectDir, null));
-            }
-
-            // Create a shared network so frontend container can reach backend by hostname
-            String networkId = ensureNetwork(props.getSharedNetworkName());
-
-            ContainerContext backendCtx  = startBackendContainer(backendDir, networkId);
-            ContainerContext frontendCtx = startFrontendContainer(frontendDir, networkId);
-            return new FullstackContext(backendCtx, frontendCtx);
-        } else {
-            return new FullstackContext(null, startFrontendContainer(projectDir, null));
+        if (!isFullstack) {
+            return new FullstackContext(null, null, startFrontendContainer(projectDir, null));
         }
+
+        Path frontendDir = projectDir.resolve("frontend");
+        Path backendDir  = projectDir.resolve("backend");
+
+        if (!Files.isDirectory(frontendDir) || !Files.isDirectory(backendDir)) {
+            log.warn("[DockerRunner] FULLSTACK: frontend/ or backend/ missing, falling back to FRONTEND_ONLY");
+            return new FullstackContext(null, null, startFrontendContainer(projectDir, null));
+        }
+
+        String networkId = ensureNetwork(props.getSharedNetworkName());
+
+        // Detect DB and start sidecar first so it has maximum warm-up time
+        DbType dbType = props.isDbSidecarEnabled()
+                ? detectDatabase(backendDir)
+                : DbType.NONE;
+
+        ContainerContext dbCtx = startDbContainer(dbType, props.getSharedNetworkName());
+
+        List<String> backendEnv = buildBackendEnv(dbType);
+        ContainerContext backendCtx  = startBackendContainer(backendDir, networkId, backendEnv);
+        ContainerContext frontendCtx = startFrontendContainer(frontendDir, networkId);
+
+        return new FullstackContext(dbCtx, backendCtx, frontendCtx);
     }
 
-    private ContainerContext startBackendContainer(Path backendDir, String networkId) throws Exception {
+    private ContainerContext startBackendContainer(Path backendDir, String networkId,
+                                                   List<String> extraEnv) throws Exception {
         int hostPort = findFreePort();
         int containerPort = props.getBackendPort();
 
@@ -130,16 +303,18 @@ public class DockerRunnerService {
         DockerClient client = dockerManager.getClient();
         CreateContainerResponse container = client.createContainerCmd(props.getBackendImage())
                 .withName("eval_backend_" + hostPort)
-                .withHostname("backend")   // frontend reaches it via http://backend:8000
+                .withHostname("backend")
                 .withWorkingDir("/app")
                 .withCmd("sh", "-c", props.getBackendStartCmd())
+                .withEnv(extraEnv)
                 .withExposedPorts(exposed)
                 .withHostConfig(hostConfig)
                 .exec();
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
-        log.info("[DockerRunner] Backend container started: {} -> host port: {}", containerId, hostPort);
+        log.info("[DockerRunner] Backend container started: {} hostPort={} dbEnvVars={}",
+                containerId, hostPort, extraEnv.size());
         return new ContainerContext(containerId, hostPort, backendDir, "backend");
     }
 
@@ -170,16 +345,15 @@ public class DockerRunnerService {
 
         String containerId = container.getId();
         dockerManager.startContainer(containerId);
-        log.info("[DockerRunner] Frontend container started: {} -> host port: {}", containerId, hostPort);
+        log.info("[DockerRunner] Frontend container started: {} hostPort={}", containerId, hostPort);
         return new ContainerContext(containerId, hostPort, frontendDir, "frontend");
     }
 
-    // ---- Wait for ready -------------------------------------------------------
+    // ---- Wait for ready (HTTP) ------------------------------------------------
 
     public void waitForReady(ContainerContext ctx, int timeoutSeconds) throws Exception {
         String url = "http://localhost:" + ctx.getHostPort();
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
-
         while (System.currentTimeMillis() < deadline) {
             try {
                 HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
@@ -188,17 +362,16 @@ public class DockerRunnerService {
                 conn.setRequestMethod("GET");
                 int code = conn.getResponseCode();
                 if (code < 500) {
-                    log.info("[DockerRunner] Service ready: {} HTTP {}", url, code);
+                    log.info("[DockerRunner] {} ready: {} HTTP {}", ctx.getRole(), url, code);
                     return;
                 }
             } catch (Exception ignored) {
             }
             Thread.sleep(3000);
         }
-        throw new RuntimeException("Container startup timeout (" + timeoutSeconds + "s), url: " + url);
+        throw new RuntimeException(ctx.getRole() + " startup timeout (" + timeoutSeconds + "s): " + url);
     }
 
-    /** Convenience overload using frontend timeout from properties */
     public void waitForReady(ContainerContext ctx) throws Exception {
         waitForReady(ctx, props.getContainerStartupTimeout());
     }
@@ -212,17 +385,17 @@ public class DockerRunnerService {
     // ---- Cleanup --------------------------------------------------------------
 
     public void cleanup(FullstackContext ctx) {
-        if (ctx.getBackendCtx() != null) {
-            cleanupContainer(ctx.getBackendCtx());
+        if (ctx.getFrontendCtx() != null) cleanupContainer(ctx.getFrontendCtx());
+        if (ctx.getBackendCtx()  != null) cleanupContainer(ctx.getBackendCtx());
+        if (ctx.getDbCtx()       != null) cleanupContainer(ctx.getDbCtx());
+
+        // Remove unzipped project directory (parent of frontend/ backend/)
+        if (ctx.getFrontendCtx() != null && ctx.getFrontendCtx().getProjectDir() != null) {
+            Path parent = ctx.getFrontendCtx().getProjectDir().getParent();
+            deleteDirectory(parent != null ? parent.toFile()
+                    : ctx.getFrontendCtx().getProjectDir().toFile());
         }
-        cleanupContainer(ctx.getFrontendCtx());
-        // Remove project dir (parent of frontend/ backend/)
-        Path projectDir = ctx.getFrontendCtx().getProjectDir().getParent();
-        if (projectDir != null) {
-            deleteDirectory(projectDir.toFile());
-        } else {
-            deleteDirectory(ctx.getFrontendCtx().getProjectDir().toFile());
-        }
+
         // Remove shared network (best effort)
         try {
             dockerManager.getClient().removeNetworkCmd(props.getSharedNetworkName()).exec();
@@ -231,9 +404,9 @@ public class DockerRunnerService {
 
     private void cleanupContainer(ContainerContext ctx) {
         try { dockerManager.stopContainer(ctx.getContainerId(), 5); }
-        catch (Exception e) { log.warn("[DockerRunner] Stop {} failed: {}", ctx.getRole(), e.getMessage()); }
+        catch (Exception e) { log.warn("[DockerRunner] stop [{}] failed: {}", ctx.getRole(), e.getMessage()); }
         try { dockerManager.removeContainer(ctx.getContainerId()); }
-        catch (Exception e) { log.warn("[DockerRunner] Remove {} failed: {}", ctx.getRole(), e.getMessage()); }
+        catch (Exception e) { log.warn("[DockerRunner] remove [{}] failed: {}", ctx.getRole(), e.getMessage()); }
     }
 
     // ---- Docker network -------------------------------------------------------
@@ -241,15 +414,10 @@ public class DockerRunnerService {
     private String ensureNetwork(String networkName) {
         try {
             DockerClient client = dockerManager.getClient();
-            // Try to inspect; if not found, create it
             try {
                 client.inspectNetworkCmd().withNetworkId(networkName).exec();
-                log.debug("[DockerRunner] Network '{}' already exists", networkName);
             } catch (Exception notFound) {
-                client.createNetworkCmd()
-                        .withName(networkName)
-                        .withDriver("bridge")
-                        .exec();
+                client.createNetworkCmd().withName(networkName).withDriver("bridge").exec();
                 log.info("[DockerRunner] Created Docker network '{}'", networkName);
             }
             return networkName;
@@ -279,7 +447,14 @@ public class DockerRunnerService {
         dir.delete();
     }
 
-    // ---- Context classes ------------------------------------------------------
+    // ---- Enums and context classes -------------------------------------------
+
+    public enum DbType {
+        NONE,       // No database needed
+        SQLITE,     // SQLite — handled by Python stdlib, no sidecar
+        POSTGRESQL,
+        MYSQL
+    }
 
     @lombok.Data
     @lombok.AllArgsConstructor
@@ -287,17 +462,19 @@ public class DockerRunnerService {
         private String containerId;
         private int hostPort;
         private Path projectDir;
-        /** "frontend" or "backend" — used for logging */
+        /** "frontend", "backend", or "db" */
         private String role;
     }
 
     /**
-     * Holds both backend and frontend ContainerContexts.
-     * backendCtx is null in FRONTEND_ONLY mode.
+     * Holds all three ContainerContexts for a full-stack evaluation run.
+     * dbCtx and backendCtx are null in FRONTEND_ONLY mode.
+     * dbCtx is null when no database dependency is detected.
      */
     @lombok.Data
     @lombok.AllArgsConstructor
     public static class FullstackContext {
+        private ContainerContext dbCtx;
         private ContainerContext backendCtx;
         private ContainerContext frontendCtx;
     }
