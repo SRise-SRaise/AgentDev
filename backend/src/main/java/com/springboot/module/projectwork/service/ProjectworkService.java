@@ -90,13 +90,13 @@ public class ProjectworkService {
         entity.setFullScore(BigDecimal.valueOf(100));
         entity.setStatus("DRAFT");
         entity.setCreatedBy(createdByUserId);
-        entity.setCreatedAt(new Date());
-        entity.setUpdatedAt(new Date());
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
         if (req.getStartTime() != null && !req.getStartTime().isEmpty()) {
-            entity.setStartTime(parseDate(req.getStartTime()));
+            entity.setStartTime(parseLocalDateTime(req.getStartTime()));
         }
         if (req.getDeadline() != null && !req.getDeadline().isEmpty()) {
-            entity.setDeadline(parseDate(req.getDeadline()));
+            entity.setDeadline(parseLocalDateTime(req.getDeadline()));
         }
         entity.setRubricJson(buildRubricJson(req.getScoreItems()));
         assignmentMapper.insert(entity);
@@ -110,12 +110,12 @@ public class ProjectworkService {
         entity.setTitle(req.getTitle());
         entity.setDescription(req.getDescription());
         entity.setRequirement(req.getRequirement());
-        entity.setUpdatedAt(new Date());
+        entity.setUpdatedAt(LocalDateTime.now());
         if (req.getStartTime() != null && !req.getStartTime().isEmpty()) {
-            entity.setStartTime(parseDate(req.getStartTime()));
+            entity.setStartTime(parseLocalDateTime(req.getStartTime()));
         }
         if (req.getDeadline() != null && !req.getDeadline().isEmpty()) {
-            entity.setDeadline(parseDate(req.getDeadline()));
+            entity.setDeadline(parseLocalDateTime(req.getDeadline()));
         }
         entity.setRubricJson(buildRubricJson(req.getScoreItems()));
         assignmentMapper.updateById(entity);
@@ -126,7 +126,7 @@ public class ProjectworkService {
         ProjectAssignment entity = assignmentMapper.selectById(id);
         if (entity == null) throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Assignment not found");
         entity.setStatus("PUBLISHED");
-        entity.setUpdatedAt(new Date());
+        entity.setUpdatedAt(LocalDateTime.now());
         assignmentMapper.updateById(entity);
     }
 
@@ -584,9 +584,12 @@ public class ProjectworkService {
         vo.setFullScore(toBigDecimal(row.get("full_score")));
         Object st = row.get("start_time");
         Object dl = row.get("deadline");
-        if (st instanceof java.sql.Timestamp) vo.setStartTime(new Date(((java.sql.Timestamp) st).getTime()));
-        if (dl instanceof java.sql.Timestamp) vo.setDeadline(new Date(((java.sql.Timestamp) dl).getTime()));
-        vo.setCreatedAt(st instanceof java.sql.Timestamp ? new Date(((java.sql.Timestamp) st).getTime()) : null);
+        Object cat = row.get("created_at");
+        Object uat = row.get("updated_at");
+        if (st instanceof java.sql.Timestamp) vo.setStartTime(((java.sql.Timestamp) st).toLocalDateTime());
+        if (dl instanceof java.sql.Timestamp) vo.setDeadline(((java.sql.Timestamp) dl).toLocalDateTime());
+        if (cat instanceof java.sql.Timestamp) vo.setCreatedAt(((java.sql.Timestamp) cat).toLocalDateTime());
+        if (uat instanceof java.sql.Timestamp) vo.setUpdatedAt(((java.sql.Timestamp) uat).toLocalDateTime());
         Object sc = row.get("submission_count");
         Object ec = row.get("eval_count");
         vo.setSubmissionCount(sc != null ? Integer.parseInt(sc.toString()) : 0);
@@ -657,14 +660,14 @@ public class ProjectworkService {
                 .collect(Collectors.toList());
     }
 
-    private Date parseDate(String s) {
+    private LocalDateTime parseLocalDateTime(String s) {
+        if (s == null || s.isBlank()) return null;
         try {
-            return java.sql.Timestamp.valueOf(LocalDateTime.parse(s.replace("T", " "),
-                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+            return LocalDateTime.parse(s.replace("T", " "),
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
         } catch (Exception e) {
             try {
-                return java.sql.Timestamp.valueOf(LocalDateTime.parse(s,
-                        DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                return LocalDateTime.parse(s, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             } catch (Exception ex) {
                 return null;
             }

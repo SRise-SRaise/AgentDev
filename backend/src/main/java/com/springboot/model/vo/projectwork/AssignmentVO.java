@@ -2,7 +2,7 @@ package com.springboot.model.vo.projectwork;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Data;
 
@@ -18,12 +18,12 @@ public class AssignmentVO implements Serializable {
     private String requirement;
     private String submitFormat;
     private BigDecimal fullScore;
-    private Date startTime;
-    private Date deadline;
+    private LocalDateTime startTime;
+    private LocalDateTime deadline;
     private String status;
     private Long createdBy;
-    private Date createdAt;
-    private Date updatedAt;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     /** Parsed from rubric_json */
     private List<ScoreItemVO> scoreItems;
